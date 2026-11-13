@@ -1758,8 +1758,10 @@ function buildOdpGroupedRow(odpName, items, canEdit) {
     const photoRed   = findPhoto('REDAMAN', 'OPM', 'LOSS', 'DBM');
     const photoLabel = findPhoto('LABEL', 'STIKER', 'STICKER', 'PLANG');
 
-    const locItem = items.find(it => it.locationUrl) || null;
-    const locationUrl = locItem ? locItem.locationUrl : null;
+    const locItem = items.find(it => it.locationUrl) || items.find(it => it.latitude && it.longitude) || null;
+    const locationUrl = locItem
+        ? (locItem.locationUrl || `https://www.google.com/maps?q=${locItem.latitude},${locItem.longitude}`)
+        : null;
 
     // Cari nama ODC induk dari item
     const odcInduk = (() => {
