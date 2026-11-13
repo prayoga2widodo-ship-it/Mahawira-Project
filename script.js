@@ -1676,13 +1676,11 @@ function filterFiles() {
     renderOdcDropdownInSearch();
 }
 
-// Render dropdown ODC di area pencarian (untuk filter ODP berdasarkan induk ODC)
+// Render dropdown filter di area pencarian (ODC untuk ODP, ODP+ODC untuk MODEM)
 function renderOdcDropdownInSearch() {
-    const dropdown = document.getElementById('odcSearchDropdown');
-    if (!dropdown) return;
-
-    // Hanya tampil saat folder ODP aktif
+    // === Dropdown ODC untuk folder ODP ===
     const container = document.getElementById('odcSearchDropdownContainer');
+    const dropdown = document.getElementById('odcSearchDropdown');
     if (container) {
         if (currentCategory === 'ODP') {
             container.classList.remove('hidden');
@@ -1690,40 +1688,258 @@ function renderOdcDropdownInSearch() {
             container.classList.add('hidden');
         }
     }
+    if (dropdown && currentCategory === 'ODP') {
+        const odcSet = new Set();
+        sampleData.forEach(item => {
+            const ref = item.odcReference || item.odc_reference || '';
+            if (ref && ref.toUpperCase().startsWith('ODC')) odcSet.add(ref.trim());
+            const cat = item.category || '';
+            if (cat.toUpperCase().startsWith('ODC')) odcSet.add(cat.trim());
+        });
+        const odcList = Array.from(odcSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        const currentVal = dropdown.value;
+        dropdown.innerHTML = `<option value="all">🌐 Semua ODC (${odcList.length} ODC)</option>`;
+        odcList.forEach(odc => {
+            const opt = document.createElement('option');
+            opt.value = odc;
+            opt.textContent = `📡 ${odc}`;
+            if (odc === currentVal) opt.selected = true;
+            dropdown.appendChild(opt);
+        });
+    }
 
-    if (currentCategory !== 'ODP') return;
+    // === Dropdown ODC + ODP untuk folder MODEM ===
+    const modemOdcContainer = document.getElementById('modemOdcDropdownContainer');
+    const modemOdcDropdown  = document.getElementById('modemOdcDropdown');
+    const modemOdpContainer = document.getElementById('modemOdpDropdownContainer');
+    const modemOdpDropdown  = document.getElementById('modemOdpDropdown');
 
-    // Kumpulkan nama ODC unik dari data
-    const odcSet = new Set();
-    sampleData.forEach(item => {
-        const ref = item.odcReference || item.odc_reference || '';
-        if (ref && ref.toUpperCase().startsWith('ODC')) {
-            odcSet.add(ref.trim());
+    if (modemOdcContainer) {
+        if (currentCategory === 'MODEM') modemOdcContainer.classList.remove('hidden');
+        else modemOdcContainer.classList.add('hidden');
+    }
+    if (modemOdpContainer) {
+        if (currentCategory === 'MODEM') modemOdpContainer.classList.remove('hidden');
+        else modemOdpContainer.classList.add('hidden');
+    }
+
+    if (currentCategory === 'MODEM') {
+        // Isi dropdown ODC
+        if (modemOdcDropdown) {
+            const odcSet2 = new Set();
+            sampleData.forEach(item => {
+                const isM = (item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
+                            (item.name && item.name.toUpperCase().includes('MODEM')) ||
+                            Boolean(item.customerId || item.customerName || item.modemSn);
+                if (!isM) return;
+                const ref = item.odcReference || item.odc_reference || item.category || '';
+                if (ref && ref.toUpperCase().startsWith('ODC')) odcSet2.add(ref.trim());
+            });
+            const odcList2 = Array.from(odcSet2).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            const curOdcVal = modemOdcDropdown.value;
+            modemOdcDropdown.innerHTML = `<option value="all">🌐 Semua ODC (${odcList2.length})</option>`;
+            odcList2.forEach(odc => {
+                const opt = document.createElement('option');
+                opt.value = odc;
+                opt.textContent = `📡 ${odc}`;
+                if (odc === curOdcVal) opt.selected = true;
+                modemOdcDropdown.appendChild(opt);
+            });
         }
-        const cat = item.category || '';
-        if (cat.toUpperCase().startsWith('ODC')) {
-            odcSet.add(cat.trim());
+
+        // Isi dropdown ODP (dari data modem berdasarkan ODC yang dipilih)
+        if (modemOdpDropdown) {
+            const selOdc = modemOdcDropdown ? modemOdcDropdown.value : 'all';
+            const odpSet = new Set();
+            sampleData.forEach(item => {
+                const isM = (item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
+                            (item.name && item.name.toUpperCase().includes('MODEM')) ||
+                            Boolean(item.customerId || item.customerName || item.modemSn);
+                if (!isM) return;
+                // Filter ODC dulu kalau ada
+                if (selOdc && selOdc !== 'all') {
+                    const ref = (item.odcReference || item.odc_reference || item.category || '').toUpperCase();
+                    const selNorm = selOdc.trim().toUpperCase();
+                    if (!ref.includes(selNorm)) return;
+                }
+                const odpNm = item.odpName || extractOdpName(item);
+                if (odpNm) odpSet.add(odpNm.trim());
+            });
+            const odpList = Array.from(odpSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            const curOdpVal = modemOdpDropdown.value;
+            modemOdpDropdown.innerHTML = `<option value="all">🛜 Semua ODP (${odpList.length})</option>`;
+            odpList.forEach(odp => {
+                const opt = document.createElement('option');
+                opt.value = odp;
+                opt.textContent = `📶 ${odp}`;
+                if (odp === curOdpVal) opt.selected = true;
+                modemOdpDropdown.appendChild(opt);
+            });
         }
-    });
-
-    const odcList = Array.from(odcSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    const currentVal = dropdown.value;
-
-    dropdown.innerHTML = `<option value="all">🌐 Semua ODC (${odcList.length} ODC)</option>`;
-    odcList.forEach(odc => {
-        const opt = document.createElement('option');
-        opt.value = odc;
-        opt.textContent = `📡 ${odc}`;
-        if (odc === currentVal) opt.selected = true;
-        dropdown.appendChild(opt);
-    });
+    }
 }
 
 // =====================================================================
-// RENDER TABLE ODP: Khusus folder ODP → 1 baris per unit ODP dengan
-// kolom: NAMA ODP | INDUK ODC | SHARE LOC | TAMPAK LUAR | TAMPAK DALAM |
-//        FOTO REDAMAN | FOTO LABEL | PENGUNGGAH | TANGGAL & WAKTU | AKSI
+// RENDER TABLE MODEM: Khusus folder MODEM → 1 baris per unit modem
+// kolom: VIEW DEPAN | VIEW BELAKANG | ID PELANGGAN | NAMA PELANGGAN |
+//        SN MODEM | NAMA ODP | PENGUNGGAH | TANGGAL & WAKTU | AKSI
 // =====================================================================
+function setModemTableHeader() {
+    const thead = document.getElementById('fileTableHead');
+    if (!thead) return;
+    thead.innerHTML = `
+        <tr class="bg-cyan-50/80 border-b border-cyan-200/80 text-cyan-700 text-[10.5px] font-bold uppercase tracking-wider">
+            <th class="py-2.5 px-3 min-w-[110px]"><i class="fa-solid fa-house-signal mr-1 text-cyan-500"></i>Identitas Modem</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-image mr-1 text-blue-400"></i>View Depan</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-image mr-1 text-indigo-400"></i>View Belakang</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-id-card mr-1 text-indigo-400"></i>ID Pelanggan</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-user mr-1 text-slate-400"></i>Nama Pelanggan</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-barcode mr-1 text-amber-500"></i>SN Modem</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-network-wired mr-1 text-purple-400"></i>Nama ODP</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-calendar mr-1 text-slate-400"></i>Tanggal &amp; Waktu</th>
+            <th class="py-2.5 px-3 text-right">Aksi</th>
+        </tr>
+    `;
+}
+
+function buildModemGroupedRow(groupKey, items, canEdit) {
+    // Ambil data perwakilan dari item terbaru
+    const newest = items.reduce((a, b) => ((a.id || 0) > (b.id || 0) ? a : b), items[0] || {});
+
+    // Ambil SN, ID, Nama dari item manapun yang punya data
+    const snItem    = items.find(it => it.modemSn) || newest;
+    const idItem    = items.find(it => it.customerId) || newest;
+    const nameItem  = items.find(it => it.customerName) || newest;
+    const odpItem   = items.find(it => it.odpName || extractOdpName(it)) || newest;
+    const odpNama   = odpItem.odpName || extractOdpName(odpItem) || '-';
+
+    const modemSn      = snItem.modemSn    || '-';
+    const customerId   = idItem.customerId  || '-';
+    const customerName = nameItem.customerName || '-';
+
+    // Cari foto depan dan belakang
+    const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const matchType = (item, ...types) => {
+        const ptype = (item.photoType || '').toUpperCase();
+        const dname = (item.deviceLabel || item.name || '').toUpperCase();
+        return types.some(t => ptype.includes(norm(t)) || dname.includes(norm(t)));
+    };
+    const photoDepan    = items.find(it => matchType(it, 'DEPAN', 'FRONT', 'TAMPAK DEPAN', 'TAMPAK LUAR')) || null;
+    const photoBelakang = items.find(it => matchType(it, 'BELAKANG', 'BACK', 'REAR', 'TAMPAK BELAKANG', 'TAMPAK DALAM')) || null;
+
+    const photoBtn = (item, label, colorClass, iconClass) => item
+        ? `<button onclick="previewFile(${item.id})"
+                class="inline-flex flex-col items-center justify-center gap-0.5 w-full px-1.5 py-1.5 ${colorClass} rounded-lg font-semibold text-[10px] transition shadow-xs whitespace-nowrap cursor-pointer border"
+                title="Lihat ${label} (${item.size || '-'})">
+                <i class="fa-solid ${iconClass} text-[11px]"></i>
+                <span class="text-[9px] leading-tight">View</span>
+           </button>`
+        : `<div class="inline-flex flex-col items-center justify-center gap-0.5 w-full px-1.5 py-1.5 bg-slate-50 text-slate-300 border border-slate-200/60 rounded-lg text-[9px] opacity-60 cursor-not-allowed" title="${label} belum diupload">
+                <i class="fa-solid ${iconClass} text-[10px]"></i>
+                <span>-</span>
+           </div>`;
+
+    const depanBtn    = photoBtn(photoDepan,    'View Depan',    'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200',     'fa-image');
+    const belakangBtn = photoBtn(photoBelakang, 'View Belakang', 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200', 'fa-image');
+
+    const isOwner = checkIsOwner();
+    const allIds = items.map(it => it.id).filter(Boolean);
+    const deleteGroupBtn = isOwner && allIds.length > 0
+        ? `<button onclick="deleteModemGroup('${escapeHtml(groupKey)}', [${allIds.join(',')}])"
+                class="inline-flex items-center gap-1 px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-semibold transition shadow-xs"
+                title="Hapus Semua Evident Modem ${escapeHtml(groupKey)} (Owner)">
+                <i class="fa-solid fa-trash-can text-[9px]"></i>
+                <span>Hapus</span>
+           </button>`
+        : '';
+
+    // Tombol history pelanggan
+    const historyBtn = (idItem.customerId || nameItem.customerName || snItem.modemSn)
+        ? `<button onclick="openCustomerHistoryModal('${escapeHtml(idItem.customerId || '')}', '${escapeHtml(nameItem.customerName || '')}', '${escapeHtml(snItem.modemSn || '')}')"
+                class="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-semibold transition shadow-xs"
+                title="History Aktivitas Pelanggan">
+                <i class="fa-solid fa-clock-rotate-left text-[9px]"></i>
+                <span>History</span>
+           </button>`
+        : '';
+
+    const photoCount = items.length;
+    const tr = document.createElement('tr');
+    tr.className = 'bg-cyan-50/40 hover:bg-cyan-50 border-b border-cyan-100 transition';
+    tr.innerHTML = `
+        <td class="py-2.5 px-3">
+            <div class="flex flex-col gap-0.5">
+                <span class="inline-flex items-center gap-1.5 font-bold text-cyan-800 text-[11px]">
+                    <i class="fa-solid fa-house-signal text-cyan-500 text-[10px]"></i>
+                    ${modemSn !== '-' ? escapeHtml(modemSn) : (customerId !== '-' ? escapeHtml(customerId) : 'Modem')}
+                </span>
+                <span class="text-[9.5px] text-slate-400">${photoCount} foto evident</span>
+            </div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${depanBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${belakangBtn}</div>
+        </td>
+        <td class="py-2.5 px-3">
+            ${customerId !== '-'
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 border border-indigo-200/80 rounded-md text-indigo-800 font-bold font-mono text-[10.5px] whitespace-nowrap shadow-2xs"><i class="fa-solid fa-id-card text-indigo-500 text-[10px]"></i>${escapeHtml(customerId)}</span>`
+                : `<span class="text-slate-300 text-[10.5px] font-mono">-</span>`}
+        </td>
+        <td class="py-2.5 px-3">
+            ${customerName !== '-'
+                ? `<div class="font-semibold text-slate-800 text-[11px] flex items-center gap-1 whitespace-nowrap"><i class="fa-solid fa-user text-slate-400 text-[10px]"></i><span>${escapeHtml(customerName)}</span></div>`
+                : `<span class="text-slate-300 text-[10.5px]">-</span>`}
+        </td>
+        <td class="py-2.5 px-3">
+            ${modemSn !== '-'
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-200/80 rounded-md text-amber-900 font-bold font-mono text-[10.5px] whitespace-nowrap shadow-2xs"><i class="fa-solid fa-barcode text-amber-700 text-[10px]"></i>${escapeHtml(modemSn)}</span>`
+                : `<span class="text-slate-300 text-[10.5px] font-mono">-</span>`}
+        </td>
+        <td class="py-2.5 px-3">
+            ${odpNama !== '-'
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 border border-purple-200/80 rounded-md text-purple-800 font-bold text-[10.5px] whitespace-nowrap shadow-2xs"><i class="fa-solid fa-network-wired text-purple-600 text-[9.5px]"></i>${escapeHtml(odpNama)}</span>`
+                : `<span class="text-slate-300 text-[10.5px]">-</span>`}
+        </td>
+        <td class="py-2.5 px-3 font-medium text-slate-700 text-[10.5px]">${escapeHtml(newest.uploader || '-')}</td>
+        <td class="py-2.5 px-3 text-slate-400 text-[10.5px]">${escapeHtml(newest.date || '-')}</td>
+        <td class="py-2.5 px-3 text-right whitespace-nowrap">
+            <div class="inline-flex items-center gap-1 flex-wrap justify-end">
+                ${historyBtn}
+                ${deleteGroupBtn}
+            </div>
+        </td>
+    `;
+    return tr;
+}
+
+async function deleteModemGroup(groupKey, ids) {
+    if (!checkIsOwner()) return alert('Akses Ditolak: Hanya Owner yang dapat menghapus.');
+    if (!confirm(`PERINGATAN OWNER:\nHapus semua ${ids.length} foto evident modem untuk "${groupKey}"?\n\nAksi ini tidak dapat dibatalkan.`)) return;
+
+    let failed = 0;
+    for (const id of ids) {
+        try {
+            const item = sampleData.find(d => d.id === id);
+            if (item && item.fileUrl) {
+                const fileName = item.fileUrl.split('/').pop().split('?')[0];
+                try { await supabaseClient.storage.from('evidents').remove([`uploads/${decodeURIComponent(fileName)}`]); } catch (e) {}
+            }
+            const { error } = await supabaseClient.from('evidents').delete().eq('id', id);
+            if (error) failed++;
+            else sampleData = sampleData.filter(d => d.id !== id);
+        } catch (e) { failed++; }
+    }
+
+    renderCategoryUI();
+    filterFiles();
+    if (failed > 0) alert(`Selesai. ${ids.length - failed} berhasil dihapus, ${failed} gagal.`);
+    else alert(`Semua evident modem "${groupKey}" berhasil dihapus.`);
+}
+
+
 function setOdpTableHeader() {
     const thead = document.getElementById('fileTableHead');
     if (!thead) return;
@@ -1916,7 +2132,6 @@ function setDefaultTableHeader() {
             <th class="py-2.5 px-3">Nama Pelanggan</th>
             <th class="py-2.5 px-3">SN Modem</th>
             <th class="py-2.5 px-3">Nama ODP</th>
-            <th class="py-2.5 px-3">Kategori</th>
             <th class="py-2.5 px-3">Pengunggah</th>
             <th class="py-2.5 px-3">Tanggal &amp; Waktu</th>
             <th class="py-2.5 px-3 text-right">Aksi</th>
@@ -2057,6 +2272,77 @@ function renderTable(data, isSearchMode = false) {
     tbody.innerHTML = '';
 
     const canEdit = currentUserRole === 'owner' || currentUserRole === 'editor';
+
+    // ===== MODE KHUSUS: Folder MODEM → Tampilkan tabel grouped per unit modem =====
+    if (currentCategory === 'MODEM' && !isSearchMode) {
+        setModemTableHeader();
+
+        // Ambil filter ODP dari dropdown modem (jika ada)
+        const modemOdpDropEl = document.getElementById('modemOdpDropdown');
+        const selectedOdpFilter = modemOdpDropEl ? modemOdpDropEl.value : 'all';
+        const modemOdcDropEl = document.getElementById('modemOdcDropdown');
+        const selectedOdcFilterModem = modemOdcDropEl ? modemOdcDropEl.value : 'all';
+
+        const isModemItem = it =>
+            (it.deviceLabel && it.deviceLabel.toUpperCase().includes('MODEM')) ||
+            (it.name && it.name.toUpperCase().includes('MODEM')) ||
+            (it.photoType && it.photoType.toUpperCase() === 'MODEM') ||
+            (it.category && it.category.toUpperCase() === 'MODEM') ||
+            Boolean(it.customerId || it.customerName || it.modemSn);
+
+        let modemData = data && data.length > 0 ? data : sampleData.filter(isModemItem);
+
+        // Filter ODC
+        if (selectedOdcFilterModem && selectedOdcFilterModem !== 'all') {
+            const selNorm = selectedOdcFilterModem.trim().toUpperCase();
+            modemData = modemData.filter(item => {
+                const ref = (item.odcReference || item.odc_reference || item.category || '').toUpperCase();
+                return ref.includes(selNorm) || selNorm.includes(ref.replace(/^ODC[-\s]*/,''));
+            });
+        }
+
+        // Filter ODP
+        if (selectedOdpFilter && selectedOdpFilter !== 'all') {
+            const odpNorm = selectedOdpFilter.trim().toUpperCase().replace(/[\s_-]+/g, '');
+            modemData = modemData.filter(item => {
+                const odpNama = (item.odpName || extractOdpName(item) || '').trim().toUpperCase().replace(/[\s_-]+/g, '');
+                return odpNama === odpNorm || odpNama.includes(odpNorm);
+            });
+        }
+
+        if (!modemData || modemData.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="py-10 text-center text-slate-400">
+                        <i class="fa-solid fa-folder-open text-2xl text-slate-300 mb-1.5 block"></i>
+                        <p class="font-medium text-xs">Belum ada berkas evident Modem yang tersimpan.</p>
+                    </td>
+                </tr>
+            `;
+            updateStats();
+            return;
+        }
+
+        // Grup berdasarkan SN modem → ID pelanggan → nama file
+        const modemGroups = {};
+        modemData.forEach(item => {
+            const key = item.modemSn
+                ? `SN:${item.modemSn.trim().toUpperCase()}`
+                : (item.customerId
+                    ? `ID:${item.customerId.trim().toUpperCase()}`
+                    : `FILE:${(item.name || '').trim().toUpperCase()}`);
+            if (!modemGroups[key]) modemGroups[key] = { key, items: [] };
+            modemGroups[key].items.push(item);
+        });
+
+        const sortedKeys = Object.keys(modemGroups).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        sortedKeys.forEach(key => {
+            tbody.appendChild(buildModemGroupedRow(key, modemGroups[key].items, canEdit));
+        });
+
+        updateStats();
+        return;
+    }
 
     // ===== MODE KHUSUS: Folder ODP → Tampilkan tabel grouped per unit ODP =====
     if (currentCategory === 'ODP' && !isSearchMode) {
@@ -2409,7 +2695,6 @@ function buildRow(item, canEdit, isOdcHeader = false, isChild = false) {
         ${nameCell}
         ${snCell}
         ${odpCell}
-        <td class="py-2 px-3">${categoryBadge}</td>
         <td class="py-2 px-3 font-medium text-slate-700 text-[10.5px]">${escapeHtml(item.uploader)}</td>
         <td class="py-2 px-3 text-slate-400 text-[10.5px]">${escapeHtml(item.date)}</td>
         <td class="py-2 px-3 text-right whitespace-nowrap">
