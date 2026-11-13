@@ -13,16 +13,8 @@ let currentOdpFilter = 'all';
 let categorySearchQuery = '';
 let currentPreviewId = null;
 
-// Cache kategori yang telah dihapus permanen oleh Owner
-let deletedCategoriesSet = new Set();
-try {
-    const rawDeleted = localStorage.getItem('evident_deleted_categories');
-    if (rawDeleted) {
-        JSON.parse(rawDeleted).forEach(c => {
-            if (c) deletedCategoriesSet.add(c.toString().trim().toUpperCase());
-        });
-    }
-} catch (e) {}
+// Bersihkan cache lama jika ada
+try { localStorage.removeItem('evident_deleted_categories'); } catch (e) {}
 
 // Fungsi helper: Cek apakah user saat ini adalah Owner Project
 function checkIsOwner() {
@@ -1034,11 +1026,11 @@ async function submitBulkTelegramFromDashboard() {
 
 // Helper: Normalisasi string nama ODC dari label/referensi
 function normalizeOdc(s) {
-    if (!s) return null;
+    if (!s || typeof s !== 'string') return null;
     const clean = s.trim().toUpperCase().replace(/\s*\[[^\]]+\]\s*$/, '').trim();
-    const m = clean.match(/ODC-([A-Z0-9]+(?:-[A-Z0-9]+)?)[\s-]+([A-Z0-9]+)/i);
+    const m = clean.match(/ODC[-_\s]+([A-Z0-9]+(?:-[A-Z0-9]+)?)[\s-]+([A-Z0-9]+)/i);
     if (m) return `ODC-${m[1].toUpperCase()} ${m[2].toUpperCase()}`;
-    if (clean.startsWith('ODC-')) return clean;
+    if (clean.startsWith('ODC-') || clean.startsWith('ODC ')) return clean;
     return null;
 }
 
@@ -1047,22 +1039,19 @@ function getItemOdcGroup(item) {
     if (!item) return null;
 
     // Khusus Modem: jika deviceLabel mengandung MODEM [ODP-xxx], gunakan odcReference/category
-    const isModemLabel = item.deviceLabel && item.deviceLabel.toUpperCase().startsWith('MODEM [ODP-');
+    const isModemLabel = item.deviceLabel && typeof item.deviceLabel === 'string' && item.deviceLabel.toUpperCase().startsWith('MODEM [ODP-');
     if (isModemLabel) {
-        // 1. odcReference adalah ODC yang sudah disimpan
-        const refOdc = normalizeOdc(item.odcReference);
+        const refOdc = normalizeOdc(item.odcReference || item.odc_reference);
         if (refOdc) return refOdc;
-        // 2. category adalah ODC jika modem sudah benar disimpan
         const catOdc = normalizeOdc(item.category);
         if (catOdc) return catOdc;
-        // 3. Ekstrak dari label: MODEM [ODP-SKD 01/01] -> ODC-SKD 01
         const mMod = item.deviceLabel.match(/MODEM\s*\[ODP-([A-Z0-9]+(?:-[A-Z0-9]+)?)[\\s-]+([A-Z0-9]+)\s*\//i);
         if (mMod) return `ODC-${mMod[1].toUpperCase()} ${mMod[2].toUpperCase()}`;
         return null;
     }
 
     // 1. Dari odcReference (misal ODC-SKD 01)
-    const refOdc = normalizeOdc(item.odcReference);
+    const refOdc = normalizeOdc(item.odcReference || item.odc_reference);
     if (refOdc) return refOdc;
 
     // 2. Dari category jika bertipe ODC-xxx
@@ -1074,57 +1063,107 @@ function getItemOdcGroup(item) {
     if (lblOdc) return lblOdc;
 
     // 4. Dari deviceLabel ODP (misal ODP-SKD 01/01 -> ODC-SKD 01)
-    if (item.deviceLabel) {
+    if (item.deviceLabel && typeof item.deviceLabel === 'string') {
         const mOdp = item.deviceLabel.match(/ODP-([A-Z0-9]+(?:-[A-Z0-9]+)?)[\s-]+([A-Z0-9]+)\s*\//i);
         if (mOdp) return `ODC-${mOdp[1].toUpperCase()} ${mOdp[2].toUpperCase()}`;
     }
 
     // 5. Dari nama file (misal evident_ODC-SKD_01_...)
-    if (item.name) {
+    if (item.name && typeof item.name === 'string') {
         const mOdcName = item.name.match(/ODC[-_]([A-Z0-9]+)[-_]([A-Z0-9]+)/i);
         if (mOdcName) return `ODC-${mOdcName[1].toUpperCase()} ${mOdcName[2].toUpperCase()}`;
     }
     return null;
 }
 
+// Helper: Cek kecocokan berkas dengan kategori target secara seragam dan aman
+function isItemMatchingCategory(item, targetCat) {
+    if (!item) return false;
+    if (!targetCat || targetCat === 'all') return true;
+
+    const tNorm = targetCat.trim().toUpperCase();
+    const tClean = tNorm.replace(/[\s_-]+/g, '');
+
+    // 1. Cek category langsung
+    const itemCat = (item.category || '').trim().toUpperCase();
+    if (itemCat === tNorm || (itemCat && itemCat.replace(/[\s_-]+/g, '') === tClean)) return true;
+
+    // 2. Cek odc_reference / odcReference
+    const itemRef = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
+    if (itemRef === tNorm || (itemRef && itemRef.replace(/[\s_-]+/g, '') === tClean)) return true;
+
+    // 3. Cek ODC group
+    const itemOdc = (getItemOdcGroup(item) || '').trim().toUpperCase();
+    if (itemOdc === tNorm || (itemOdc && itemOdc.replace(/[\s_-]+/g, '') === tClean)) return true;
+
+    // 4. Khusus kategori MODEM
+    if (tNorm === 'MODEM') {
+        if ((item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
+            (item.name && item.name.toUpperCase().includes('MODEM')) ||
+            (item.photoType && item.photoType.toUpperCase() === 'MODEM') ||
+            Boolean(item.customerId || item.customerName || item.modemSn)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Kumpulkan seluruh kategori ODC & non-ODC dinamis
 function extractAllCategories() {
-    const odcSet = new Set();
-    const otherSet = new Set();
+    const catMap = new Map();
 
+    // 1. Dari tabel categories Supabase
     (categories || []).forEach(c => {
-        if (!c) return;
-        const norm = c.trim().toUpperCase();
-        if (deletedCategoriesSet.has(norm)) return;
-        const odc = normalizeOdc(c);
-        if (odc) {
-            if (!deletedCategoriesSet.has(odc.toUpperCase())) odcSet.add(odc);
-        } else if (norm !== 'ODC' && norm !== 'ODP') {
-            otherSet.add(norm);
+        if (!c || typeof c !== 'string') return;
+        const trimmed = c.trim();
+        if (!trimmed) return;
+        if (!catMap.has(trimmed.toUpperCase())) {
+            catMap.set(trimmed.toUpperCase(), trimmed);
         }
     });
 
+    // 2. Dari berkas evident yang ada (sampleData)
     (sampleData || []).forEach(item => {
-        const odc = getItemOdcGroup(item);
-        if (odc) {
-            if (!deletedCategoriesSet.has(odc.toUpperCase())) odcSet.add(odc);
-        } else {
-            const cat = (item.category || '').trim().toUpperCase();
-            if (cat && cat !== 'ODC' && cat !== 'ODP' && !deletedCategoriesSet.has(cat)) {
-                otherSet.add(cat);
+        if (!item) return;
+        
+        if (item.category && typeof item.category === 'string') {
+            const cat = item.category.trim();
+            if (cat && !catMap.has(cat.toUpperCase())) {
+                catMap.set(cat.toUpperCase(), cat);
+            }
+        }
+        
+        const ref = item.odcReference || item.odc_reference;
+        if (ref && typeof ref === 'string') {
+            const r = ref.trim();
+            if (r && !catMap.has(r.toUpperCase())) {
+                catMap.set(r.toUpperCase(), r);
+            }
+        }
+
+        const odcGrp = getItemOdcGroup(item);
+        if (odcGrp && typeof odcGrp === 'string') {
+            const og = odcGrp.trim();
+            if (og && !catMap.has(og.toUpperCase())) {
+                catMap.set(og.toUpperCase(), og);
             }
         }
     });
 
-    // Pastikan jika belum ada kategori apa pun dan belum dihapus, tambahkan default
-    if (odcSet.size === 0 && otherSet.size === 0) {
-        if (!deletedCategoriesSet.has('TIANG')) otherSet.add('TIANG');
-        if (!deletedCategoriesSet.has('MODEM')) otherSet.add('MODEM');
+    // Default cadangan jika belum ada sama sekali
+    if (catMap.size === 0) {
+        ['ODC', 'TIANG', 'ODP', 'MODEM'].forEach(d => catMap.set(d, d));
     }
 
-    const sortedOdc = Array.from(odcSet).sort();
-    const sortedOther = Array.from(otherSet).sort();
-    return [...sortedOdc, ...sortedOther];
+    // Urutkan kategori
+    return Array.from(catMap.values()).sort((a, b) => {
+        const aOdc = a.toUpperCase().startsWith('ODC');
+        const bOdc = b.toUpperCase().startsWith('ODC');
+        if (aOdc && !bOdc) return -1;
+        if (!aOdc && bOdc) return 1;
+        return a.localeCompare(b);
+    });
 }
 
 function renderCategoryUI() {
@@ -1146,12 +1185,8 @@ function renderCategoryUI() {
 
     visibleCats.forEach(cat => {
         const isSelected = currentCategory === cat;
-        const isOdc = cat.toUpperCase().startsWith('ODC-');
-        const count = sampleData.filter(item => {
-            if (isOdc) return getItemOdcGroup(item) === cat || item.category === cat;
-            return (item.category || '').toUpperCase() === cat.toUpperCase();
-        }).length;
-
+        const isOdc = cat.toUpperCase().startsWith('ODC');
+        const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
         const icon = isOdc ? 'fa-folder' : (cat === 'TIANG' ? 'fa-tower-broadcast' : 'fa-wifi');
 
         buttonsHtml += `
@@ -1193,11 +1228,8 @@ function renderCategoryManageList() {
     }
 
     manageList.innerHTML = allCats.map(cat => {
-        const isOdc = cat.toUpperCase().startsWith('ODC-');
-        const count = sampleData.filter(item => {
-            if (isOdc) return getItemOdcGroup(item) === cat || item.category === cat;
-            return (item.category || '').toUpperCase() === cat.toUpperCase();
-        }).length;
+        const isOdc = cat.toUpperCase().startsWith('ODC');
+        const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
 
         return `
             <div class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-lg transition">
@@ -1261,13 +1293,8 @@ function renderFolderGrid() {
 
     grid.innerHTML = visibleCats.map(cat => {
         const isSelected = currentCategory === cat;
-        const isOdc = cat.toUpperCase().startsWith('ODC-');
-        
-        const count = sampleData.filter(item => {
-            if (isOdc) return getItemOdcGroup(item) === cat || item.category === cat;
-            return (item.category || '').toUpperCase() === cat.toUpperCase();
-        }).length;
-
+        const isOdc = cat.toUpperCase().startsWith('ODC');
+        const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
         const iconClass = isOdc 
             ? 'fa-folder-closed text-blue-500' 
             : (cat === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : 'fa-wifi text-emerald-500');
@@ -1316,17 +1343,14 @@ async function addNewCategory() {
     const input = document.getElementById('newCategoryInput');
     const name = input.value.trim();
     if (!name) return alert('Nama kategori tidak boleh kosong!');
-    if (categories.includes(name)) return alert('Kategori tersebut sudah ada!');
+    if ((categories || []).map(c => (c || '').toLowerCase()).includes(name.toLowerCase())) return alert('Kategori tersebut sudah ada!');
 
     try {
         const { error } = await supabaseClient.from('categories').insert({ name: name });
         if (error) {
             console.warn("Gagal simpan kategori ke Supabase:", error.message);
         }
-        if (deletedCategoriesSet.has(name.toUpperCase())) {
-            deletedCategoriesSet.delete(name.toUpperCase());
-            localStorage.setItem('evident_deleted_categories', JSON.stringify([...deletedCategoriesSet]));
-        }
+        if (!categories) categories = [];
         categories.push(name);
         input.value = '';
         renderCategoryUI();
@@ -1343,6 +1367,7 @@ async function editCategoryByName(oldName) {
         return;
     }
     
+    if (!oldName) return;
     const newName = prompt(`Masukkan nama baru untuk kategori "${oldName}":`, oldName);
     if (!newName || !newName.trim() || newName.trim() === oldName) {
         return;
@@ -1350,59 +1375,56 @@ async function editCategoryByName(oldName) {
     const trimmed = newName.trim();
 
     try {
-        if (deletedCategoriesSet.has(trimmed.toUpperCase())) {
-            deletedCategoriesSet.delete(trimmed.toUpperCase());
-            localStorage.setItem('evident_deleted_categories', JSON.stringify([...deletedCategoriesSet]));
-        }
-
-        // 1. Update atau insert di tabel categories Supabase
-        await supabaseClient
-            .from('categories')
-            .update({ name: trimmed })
-            .ilike('name', oldName);
-            
+        // 1. Update tabel categories di Supabase
         const { data: existRows } = await supabaseClient
             .from('categories')
-            .select('id')
-            .ilike('name', trimmed);
-        if (!existRows || existRows.length === 0) {
+            .select('id, name')
+            .ilike('name', oldName);
+
+        if (existRows && existRows.length > 0) {
+            for (const r of existRows) {
+                await supabaseClient.from('categories').update({ name: trimmed }).eq('id', r.id);
+            }
+        } else {
             await supabaseClient.from('categories').insert({ name: trimmed });
         }
 
         // 2. Update berkas evident di Supabase
-        await supabaseClient
-            .from('evidents')
-            .update({ category: trimmed })
-            .ilike('category', oldName);
+        const isNewOdc = trimmed.toUpperCase().startsWith('ODC');
+        const matchingItems = sampleData.filter(item => isItemMatchingCategory(item, oldName));
 
-        const altOldName = oldName.includes('-') ? oldName.replace(/-/g, ' ') : oldName.replace(/\s+/g, '-');
-        if (altOldName !== oldName) {
-            await supabaseClient
-                .from('evidents')
-                .update({ category: trimmed })
-                .ilike('category', altOldName);
+        for (const item of matchingItems) {
+            const updatePayload = { category: trimmed };
+            if (isNewOdc) {
+                updatePayload.odc_reference = trimmed;
+            }
+            await supabaseClient.from('evidents').update(updatePayload).eq('id', item.id);
+            
+            item.category = trimmed;
+            if (isNewOdc) {
+                item.odcReference = trimmed;
+                item.odc_reference = trimmed;
+            }
         }
 
-        // 3. Update memory lokal
-        categories = categories.map(c => {
-            if (c.toLowerCase() === oldName.toLowerCase() || c.toLowerCase() === altOldName.toLowerCase()) {
+        // Update variasi jika ada query langsung
+        await supabaseClient.from('evidents').update({ category: trimmed }).ilike('category', oldName);
+        if (isNewOdc) {
+            await supabaseClient.from('evidents').update({ odc_reference: trimmed }).ilike('odc_reference', oldName);
+        }
+
+        // 3. Update array categories lokal
+        let found = false;
+        categories = (categories || []).map(c => {
+            if (c && typeof c === 'string' && c.toLowerCase().trim() === oldName.toLowerCase().trim()) {
+                found = true;
                 return trimmed;
             }
             return c;
         });
-        if (!categories.includes(trimmed)) categories.push(trimmed);
+        if (!found) categories.push(trimmed);
 
-        sampleData.forEach(item => {
-            if ((item.category && item.category.toLowerCase() === oldName.toLowerCase()) || 
-                (item.category && item.category.toLowerCase() === altOldName.toLowerCase())) {
-                item.category = trimmed;
-            }
-            if (item.odc_reference && item.odc_reference.toLowerCase() === oldName.toLowerCase()) {
-                item.odc_reference = trimmed;
-            }
-        });
-
-        if (currentCategory.toLowerCase() === oldName.toLowerCase() || currentCategory.toLowerCase() === altOldName.toLowerCase()) {
+        if (currentCategory && typeof currentCategory === 'string' && currentCategory.toLowerCase().trim() === oldName.toLowerCase().trim()) {
             currentCategory = trimmed;
         }
 
@@ -1421,13 +1443,10 @@ async function deleteCategoryByName(catName) {
         return;
     }
 
-    const isOdc = catName.toUpperCase().startsWith('ODC-');
-    const count = sampleData.filter(item => {
-        if (isOdc) return getItemOdcGroup(item) === catName || item.category === catName;
-        return (item.category || '').toUpperCase() === catName.toUpperCase();
-    }).length;
+    if (!catName) return;
 
-    const altCatName = catName.includes('-') ? catName.replace(/-/g, ' ') : catName.replace(/\s+/g, '-');
+    const matchingItems = sampleData.filter(item => isItemMatchingCategory(item, catName));
+    const count = matchingItems.length;
 
     const msg = `PERINGATAN OWNER PROJECT:\nApakah Anda yakin ingin menghapus kategori "${catName}"?\n` +
         (count > 0 ? `\nTerdapat ${count} berkas evident di dalam kategori ini yang akan ikut dihapus.` : '\nKategori ini akan dihapus dari sistem.') +
@@ -1436,37 +1455,26 @@ async function deleteCategoryByName(catName) {
     if (!confirm(msg)) return;
 
     try {
-        // 1. Hapus dari tabel categories Supabase
+        // 1. Hapus dari tabel categories di Supabase
         await supabaseClient.from('categories').delete().ilike('name', catName);
-        if (altCatName !== catName) {
-            await supabaseClient.from('categories').delete().ilike('name', altCatName);
-        }
 
-        // 2. Hapus berkas evident di Supabase untuk kategori ini
+        // 2. Hapus berkas evident di Supabase
+        for (const item of matchingItems) {
+            if (item && item.id) {
+                await supabaseClient.from('evidents').delete().eq('id', item.id);
+            }
+        }
         await supabaseClient.from('evidents').delete().ilike('category', catName);
-        if (altCatName !== catName) {
-            await supabaseClient.from('evidents').delete().ilike('category', altCatName);
-        }
-        if (isOdc) {
-            await supabaseClient.from('evidents').delete().ilike('odc_reference', catName);
-        }
 
-        // 3. Masukkan ke deletedCategoriesSet agar tidak muncul lagi
-        deletedCategoriesSet.add(catName.toUpperCase());
-        if (altCatName) deletedCategoriesSet.add(altCatName.toUpperCase());
-        localStorage.setItem('evident_deleted_categories', JSON.stringify([...deletedCategoriesSet]));
-
-        // 4. Update memory lokal
-        categories = categories.filter(c => c.toUpperCase() !== catName.toUpperCase() && c.toUpperCase() !== altCatName.toUpperCase());
-        sampleData = sampleData.filter(item => {
-            const itemCat = (item.category || '').toUpperCase();
-            const itemOdc = getItemOdcGroup(item).toUpperCase();
-            return itemCat !== catName.toUpperCase() && 
-                   itemCat !== altCatName.toUpperCase() &&
-                   itemOdc !== catName.toUpperCase();
+        // 3. Update memory lokal
+        const catNorm = catName.trim().toUpperCase();
+        categories = (categories || []).filter(c => {
+            return c && typeof c === 'string' && c.trim().toUpperCase() !== catNorm;
         });
 
-        if (currentCategory.toUpperCase() === catName.toUpperCase() || currentCategory.toUpperCase() === altCatName.toUpperCase()) {
+        sampleData = sampleData.filter(item => !isItemMatchingCategory(item, catName));
+
+        if (currentCategory && typeof currentCategory === 'string' && currentCategory.trim().toUpperCase() === catNorm) {
             currentCategory = 'all';
         }
 
@@ -1569,20 +1577,7 @@ function filterFiles() {
 
         // Mode Tampilan Folder Kategori Normal
         filtered = sampleData.filter(item => {
-            if (currentCategory === 'all') {
-                return true;
-            } else if (currentCategory.toUpperCase().startsWith('ODC-')) {
-                const itemOdc = getItemOdcGroup(item);
-                return (itemOdc === currentCategory) || (item.category === currentCategory) || (item.odcReference === currentCategory);
-            } else if (currentCategory.toUpperCase() === 'MODEM') {
-                return (item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
-                       (item.name && item.name.toUpperCase().includes('MODEM')) ||
-                       (item.photoType && item.photoType.toUpperCase() === 'MODEM') ||
-                       (item.category && item.category.toUpperCase() === 'MODEM') ||
-                       Boolean(item.customerId || item.customerName || item.modemSn);
-            } else {
-                return (item.category === currentCategory) || ((item.category || '').toUpperCase() === currentCategory.toUpperCase());
-            }
+            return isItemMatchingCategory(item, currentCategory);
         });
     }
 
