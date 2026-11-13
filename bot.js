@@ -215,21 +215,36 @@ function cleanCaptionForLabel(text) {
         .trim();
 }
 
-function buildPhotoTypeMenu(category, label, completedTypes = []) {
+function buildPhotoTypeMenu(category, label, completedTypes = [], hasLocation = false) {
     const done = Array.isArray(completedTypes) ? completedTypes : [];
     const mark = (t) => done.includes(t) ? ' ✅' : '';
     const totalDone = done.length;
 
-    const rows = [
-        [
-            Markup.button.callback(`🚪 1. Tampak Luar${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
+    const rows = [];
+    const isOdc = (category || '').toUpperCase().startsWith('ODC');
+
+    if (isOdc) {
+        rows.push([
+            Markup.button.callback(`📍 Share Loc ODC${hasLocation ? ' ✅' : ' (Wajib)'}`, 'action_odc_shareloc')
+        ]);
+        rows.push([
+            Markup.button.callback(`🚪 1. Tampak Luar / Depan${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
             Markup.button.callback(`📦 2. Tampak Dalam${mark('TAMPAK DALAM')}`, 'action_type:TAMPAK DALAM')
-        ],
-        [
+        ]);
+        rows.push([
             Markup.button.callback(`📟 3. Foto Redaman${mark('REDAMAN')}`, 'action_type:REDAMAN'),
             Markup.button.callback(`🏷 4. Foto Label${mark('LABEL')}`, 'action_type:LABEL')
-        ]
-    ];
+        ]);
+    } else {
+        rows.push([
+            Markup.button.callback(`🚪 1. Tampak Luar${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
+            Markup.button.callback(`📦 2. Tampak Dalam${mark('TAMPAK DALAM')}`, 'action_type:TAMPAK DALAM')
+        ]);
+        rows.push([
+            Markup.button.callback(`📟 3. Foto Redaman${mark('REDAMAN')}`, 'action_type:REDAMAN'),
+            Markup.button.callback(`🏷 4. Foto Label${mark('LABEL')}`, 'action_type:LABEL')
+        ]);
+    }
 
     // Tombol SELESAI / DONE selalu tersedia dan menonjol
     const doneBtnText = totalDone >= 4
@@ -1934,6 +1949,34 @@ bot.command(['batal', 'cancel'], async (ctx) => {
 // 7.B ACTION & COMMAND UNTUK FOTO TAMPAK LUAR, DALAM, REDAMAN, LABEL
 // ==========================================================
 
+// Handler Share Loc ODC
+bot.action('action_odc_shareloc', async (ctx) => {
+    await ctx.answerCbQuery();
+    const chatId = ctx.chat.id.toString();
+    const session = getSession(chatId);
+
+    if (!session.deviceLabel) {
+        return ctx.reply("⚠️ Sesi telah berakhir atau label belum dimasukkan. Silakan pilih menu:", buildMainInlineMenu());
+    }
+
+    session.step = 'waiting_location_odc';
+
+    await ctx.reply(
+        `📍 *BAGIKAN TITIK LOKASI GPS (SHARE LOC) ODC*\n\n` +
+        `🏷 *Perangkat ODC:* \`${session.deviceLabel}\`\n\n` +
+        `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
+        `Harap bagikan titik lokasi GPS ODC terlebih dahulu sebelum mengambil Foto ODC Tampak Luar / Depan.\n\n` +
+        `👇 *Silakan tekan tombol di bawah untuk membagikan lokasi GPS Anda:*`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.keyboard([
+                [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                ['❌ Batalkan Sesi']
+            ]).resize().oneTime()
+        }
+    );
+});
+
 // Aksi Pemilihan Jenis Foto Evident (Tampak Luar, Dalam, Redaman, Label)
 bot.action(/action_type:(.+)/, async (ctx) => {
     await ctx.answerCbQuery();
@@ -1943,6 +1986,26 @@ bot.action(/action_type:(.+)/, async (ctx) => {
 
     if (!session.deviceLabel) {
         return ctx.reply("⚠️ Sesi telah berakhir atau label belum dimasukkan. Silakan pilih menu:", buildMainInlineMenu());
+    }
+
+    // SOP ODC: Wajib Share Loc sebelum upload Tampak Luar / Depan
+    const isOdcCat = (session.category || '').toUpperCase().startsWith('ODC');
+    if (isOdcCat && type === 'TAMPAK LUAR' && !session.locationUrl && !session.latitude) {
+        session.step = 'waiting_location_odc';
+        return ctx.reply(
+            `📍 *SHARE LOC DIBUTUHKAN TERLEBIH DAHULU*\n\n` +
+            `🏷 *Perangkat ODC:* \`${session.deviceLabel}\`\n\n` +
+            `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
+            `Sebelum mengunggah Foto ODC Tampak Depan / Luar, teknisi wajib membagikan titik lokasi GPS ODC di lapangan.\n\n` +
+            `👇 *Silakan tekan tombol di bawah untuk membagikan titik lokasi GPS ODC:*`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                    ['❌ Batalkan Sesi']
+                ]).resize().oneTime()
+            }
+        );
     }
 
     session.photoType = type;
@@ -2546,11 +2609,47 @@ bot.on('text', async (ctx, next) => {
 });
 
 // ==========================================================
-// 9. LISTENER LOKASI (GPS UNTUK TIANG)
+// 9. LISTENER LOKASI (GPS UNTUK ODC & TIANG)
 // ==========================================================
 bot.on('location', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
+
+    // 1. Tangani Lokasi GPS untuk ODC (Share Loc sebelum Foto Tampak Luar/Depan)
+    const isOdcSession = (session.category || '').toUpperCase().startsWith('ODC');
+    if (isOdcSession && (session.step === 'waiting_location_odc' || session.step === 'waiting_location' || !session.locationUrl)) {
+        const loc = ctx.message.location;
+        const lat = loc.latitude;
+        const lng = loc.longitude;
+        const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+
+        session.latitude = lat;
+        session.longitude = lng;
+        session.locationUrl = mapsUrl;
+        session.photoType = 'TAMPAK LUAR';
+        session.step = 'waiting_photo';
+
+        await ctx.reply(
+            `✅ *LOKASI GPS ODC BERHASIL DITERIMA & DISIMPAN!*\n\n` +
+            `🏷 *Perangkat ODC:* \`${session.deviceLabel || 'ODC'}\`\n` +
+            `📍 *Titik Koordinat:* \`${lat}, ${lng}\`\n` +
+            `🗺 *Google Maps:* [Buka Peta Lokasi](${mapsUrl})\n\n` +
+            `🚪 *SEKARANG, SILAKAN AMBIL / KIRIMKAN FOTO ODC TAMPAK LUAR (DEPAN):*\n` +
+            `💡 *Tips:* Pastikan pintu ODC tertutup rapi dan fisik box ODC terlihat jelas dan utuh.`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.removeKeyboard()
+            }
+        );
+
+        return ctx.reply(
+            `📸 *Silakan ambil / kirimkan foto ${session.deviceLabel} Tampak Luar (Depan) sekarang:*`,
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔙 Pilih Jenis Foto Lain', 'action_back_types')],
+                [Markup.button.callback('❌ Batal', 'action_cancel')]
+            ])
+        );
+    }
 
     if (session.category !== 'TIANG' || session.step !== 'waiting_location' || !session.pendingPhoto) {
         return ctx.reply("ℹ️ Lokasi diterima, namun Anda tidak sedang dalam proses input Tiang. Silakan pilih menu:", buildMainInlineMenu());
@@ -2780,11 +2879,14 @@ bot.on(['photo', 'document'], async (ctx) => {
                 await saveEvidentToDatabase(ctx, {
                     name: `evident_${baseLabel.replace(/\s+/g, '_')}_[${photoType.replace(/\s+/g, '_')}]_[H:${sha256Hash.substring(0, 16)}][DH:${dHash || 'none'}]_${Date.now()}.jpg`,
                     size: fileSize,
-                    category: baseLabel,
+                    category: 'ODC',
                     deviceLabel: fullDeviceLabel,
                     baseLabel: baseLabel,
                     photoType: photoType,
                     odcReference: baseLabel,
+                    latitude: session.latitude || null,
+                    longitude: session.longitude || null,
+                    locationUrl: session.locationUrl || null,
                     uploader: uploaderTag,
                     fileUrl: fileUrl,
                     fileBuffer: fileBuffer,
@@ -2915,11 +3017,14 @@ bot.on(['photo', 'document'], async (ctx) => {
         await saveEvidentToDatabase(ctx, {
             name: `evident_${baseLabel.replace(/\s+/g, '_')}_[${photoType.replace(/\s+/g, '_')}]_[H:${sha256Hash.substring(0, 16)}][DH:${dHash || 'none'}]_${Date.now()}.jpg`,
             size: fileSize,
-            category: baseLabel,
+            category: 'ODC',
             deviceLabel: fullDeviceLabel,
             baseLabel: baseLabel,
             photoType: photoType,
             odcReference: baseLabel,
+            latitude: session.latitude || null,
+            longitude: session.longitude || null,
+            locationUrl: session.locationUrl || null,
             uploader: uploaderTag,
             fileUrl: fileUrl,
             fileBuffer: fileBuffer,

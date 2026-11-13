@@ -746,6 +746,7 @@ async function fetchSupabaseData() {
             sampleData = evData.map(row => {
                 const parsed = parseModemInfo(row.device_label, row.name);
                 const odpName = row.odp_reference || extractOdpName(row);
+                const locUrl = row.location_url || (row.latitude && row.longitude ? `https://www.google.com/maps?q=${row.latitude},${row.longitude}` : null);
                 return {
                     id: row.id,
                     name: row.name,
@@ -758,7 +759,9 @@ async function fetchSupabaseData() {
                     customerName: row.customer_name || parsed.customerName || null,
                     modemSn: row.modem_sn || parsed.modemSn || null,
                     photoType: row.photo_type || parsed.photoType || null,
-                    locationUrl: row.location_url || null,
+                    locationUrl: locUrl,
+                    latitude: row.latitude || null,
+                    longitude: row.longitude || null,
                     uploader: row.uploader,
                     date: row.date,
                     status: row.status,
@@ -1076,49 +1079,128 @@ function getItemOdcGroup(item) {
     return null;
 }
 
+// Helper: Dapatkan nama unit ODC (contoh: ODC-SKD 01) tanpa embel-embel jenis foto
+function getOdcUnitName(item) {
+    if (!item) return 'ODC';
+    // 1. Dari deviceLabel murni (contoh: ODC-SKD 01 [TAMPAK LUAR] -> ODC-SKD 01)
+    if (item.deviceLabel && typeof item.deviceLabel === 'string') {
+        const norm = normalizeOdc(item.deviceLabel);
+        if (norm) return norm;
+        const clean = item.deviceLabel.replace(/\s*\[[^\]]+\]\s*$/, '').trim().toUpperCase();
+        if (clean.startsWith('ODC')) return clean;
+    }
+    // 2. Dari odcReference
+    const ref = normalizeOdc(item.odcReference || item.odc_reference);
+    if (ref) return ref;
+    // 3. Dari category (jika format ODC-xxx)
+    if (item.category && typeof item.category === 'string') {
+        const cNorm = normalizeOdc(item.category);
+        if (cNorm) return cNorm;
+        if (item.category.trim().toUpperCase().startsWith('ODC') && item.category.trim().toUpperCase() !== 'ODC') {
+            return item.category.trim().toUpperCase();
+        }
+    }
+    // 4. Dari helper getItemOdcGroup
+    const grp = getItemOdcGroup(item);
+    if (grp) return grp;
+    // 5. Dari nama file
+    if (item.name && typeof item.name === 'string') {
+        const m = item.name.match(/ODC[-_]([A-Z0-9]+)[-_]([A-Z0-9]+)/i);
+        if (m) return `ODC-${m[1].toUpperCase()} ${m[2].toUpperCase()}`;
+    }
+    return 'ODC';
+}
+
 // Helper: Cek kecocokan berkas dengan kategori target secara seragam dan aman
 function isItemMatchingCategory(item, targetCat) {
     if (!item) return false;
     if (!targetCat || targetCat === 'all') return true;
 
     const tNorm = targetCat.trim().toUpperCase();
-    const tClean = tNorm.replace(/[\s_-]+/g, '');
 
-    // 1. Cek category langsung
-    const itemCat = (item.category || '').trim().toUpperCase();
-    if (itemCat === tNorm || (itemCat && itemCat.replace(/[\s_-]+/g, '') === tClean)) return true;
+    // 1. Khusus kategori ODC: Satukan seluruh berkas ODC ke dalam folder ODC
+    if (tNorm === 'ODC') {
+        const dLabel = (item.deviceLabel || '').trim().toUpperCase();
+        const fName = (item.name || '').trim().toUpperCase();
+        const itemCat = (item.category || '').trim().toUpperCase();
 
-    // 2. Cek odc_reference / odcReference
-    const itemRef = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
-    if (itemRef === tNorm || (itemRef && itemRef.replace(/[\s_-]+/g, '') === tClean)) return true;
+        // Jangan masukkan evident modem pelanggan atau ODP murni ke folder ODC
+        const isModem = dLabel.includes('MODEM') || fName.includes('MODEM') || Boolean(item.customerId || item.modemSn);
+        if (isModem) return false;
 
-    // 3. Cek ODC group
-    const itemOdc = (getItemOdcGroup(item) || '').trim().toUpperCase();
-    if (itemOdc === tNorm || (itemOdc && itemOdc.replace(/[\s_-]+/g, '') === tClean)) return true;
+        const isOdp = dLabel.startsWith('ODP') || fName.startsWith('EVIDENT_ODP');
+        if (isOdp) return false;
 
-    // 4. Khusus kategori MODEM
+        if (itemCat === 'ODC' || itemCat.startsWith('ODC')) return true;
+        if (dLabel.startsWith('ODC')) return true;
+        if (fName.includes('ODC')) return true;
+        if (getItemOdcGroup(item)) return true;
+        return false;
+    }
+
+    // 2. Khusus kategori MODEM
     if (tNorm === 'MODEM') {
         if ((item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
             (item.name && item.name.toUpperCase().includes('MODEM')) ||
             (item.photoType && item.photoType.toUpperCase() === 'MODEM') ||
+            (item.category && item.category.toUpperCase() === 'MODEM') ||
             Boolean(item.customerId || item.customerName || item.modemSn)) {
             return true;
         }
+        return false;
     }
+
+    // 3. Khusus kategori ODP
+    if (tNorm === 'ODP') {
+        const dLabel = (item.deviceLabel || '').trim().toUpperCase();
+        const itemCat = (item.category || '').trim().toUpperCase();
+        const isModem = dLabel.includes('MODEM') || Boolean(item.customerId || item.modemSn);
+        if (!isModem && (itemCat === 'ODP' || dLabel.startsWith('ODP') || Boolean(item.odpName))) {
+            return true;
+        }
+        return false;
+    }
+
+    // 4. Khusus kategori TIANG
+    if (tNorm === 'TIANG') {
+        const itemCat = (item.category || '').trim().toUpperCase();
+        const dLabel = (item.deviceLabel || '').trim().toUpperCase();
+        if (itemCat === 'TIANG' || dLabel.startsWith('TIANG') || (item.name && item.name.toUpperCase().includes('TIANG'))) {
+            return true;
+        }
+        return false;
+    }
+
+    // 5. Pencocokan langsung untuk kategori kustom lainnya
+    const tClean = tNorm.replace(/[\s_-]+/g, '');
+    const itemCat = (item.category || '').trim().toUpperCase();
+    if (itemCat === tNorm || (itemCat && itemCat.replace(/[\s_-]+/g, '') === tClean)) return true;
+
+    const itemRef = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
+    if (itemRef === tNorm || (itemRef && itemRef.replace(/[\s_-]+/g, '') === tClean)) return true;
 
     return false;
 }
 
-// Kumpulkan seluruh kategori ODC & non-ODC dinamis
+// Kumpulkan seluruh kategori: Satukan semua ODC ke 1 folder 'ODC', disusul TIANG, ODP, MODEM
 function extractAllCategories() {
     const catMap = new Map();
+
+    // 4 folder sistem standar selalu tersedia
+    catMap.set('ODC', 'ODC');
+    catMap.set('TIANG', 'TIANG');
+    catMap.set('ODP', 'ODP');
+    catMap.set('MODEM', 'MODEM');
 
     // 1. Dari tabel categories Supabase
     (categories || []).forEach(c => {
         if (!c || typeof c !== 'string') return;
         const trimmed = c.trim();
         if (!trimmed) return;
-        if (!catMap.has(trimmed.toUpperCase())) {
+        // Semua kategori ODC (ODC, ODC-SKD 01, dll) disatukan ke folder 'ODC'
+        if (trimmed.toUpperCase().startsWith('ODC')) {
+            catMap.set('ODC', 'ODC');
+        } else if (!catMap.has(trimmed.toUpperCase())) {
             catMap.set(trimmed.toUpperCase(), trimmed);
         }
     });
@@ -1129,39 +1211,25 @@ function extractAllCategories() {
         
         if (item.category && typeof item.category === 'string') {
             const cat = item.category.trim();
-            if (cat && !catMap.has(cat.toUpperCase())) {
-                catMap.set(cat.toUpperCase(), cat);
-            }
-        }
-        
-        const ref = item.odcReference || item.odc_reference;
-        if (ref && typeof ref === 'string') {
-            const r = ref.trim();
-            if (r && !catMap.has(r.toUpperCase())) {
-                catMap.set(r.toUpperCase(), r);
-            }
-        }
-
-        const odcGrp = getItemOdcGroup(item);
-        if (odcGrp && typeof odcGrp === 'string') {
-            const og = odcGrp.trim();
-            if (og && !catMap.has(og.toUpperCase())) {
-                catMap.set(og.toUpperCase(), og);
+            if (cat) {
+                if (cat.toUpperCase().startsWith('ODC')) {
+                    catMap.set('ODC', 'ODC');
+                } else if (!catMap.has(cat.toUpperCase())) {
+                    catMap.set(cat.toUpperCase(), cat);
+                }
             }
         }
     });
 
-    // Default cadangan jika belum ada sama sekali
-    if (catMap.size === 0) {
-        ['ODC', 'TIANG', 'ODP', 'MODEM'].forEach(d => catMap.set(d, d));
-    }
+    const standardOrder = ['ODC', 'TIANG', 'ODP', 'MODEM'];
 
-    // Urutkan kategori
+    // Urutkan kategori: ODC pertama, lalu TIANG, ODP, MODEM, kemudian kategori kustom alfabetis
     return Array.from(catMap.values()).sort((a, b) => {
-        const aOdc = a.toUpperCase().startsWith('ODC');
-        const bOdc = b.toUpperCase().startsWith('ODC');
-        if (aOdc && !bOdc) return -1;
-        if (!aOdc && bOdc) return 1;
+        const orderA = standardOrder.indexOf(a.toUpperCase());
+        const orderB = standardOrder.indexOf(b.toUpperCase());
+        if (orderA !== -1 && orderB !== -1) return orderA - orderB;
+        if (orderA !== -1) return -1;
+        if (orderB !== -1) return 1;
         return a.localeCompare(b);
     });
 }
@@ -1185,9 +1253,9 @@ function renderCategoryUI() {
 
     visibleCats.forEach(cat => {
         const isSelected = currentCategory === cat;
-        const isOdc = cat.toUpperCase().startsWith('ODC');
+        const catUpper = cat.toUpperCase();
         const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
-        const icon = isOdc ? 'fa-folder' : (cat === 'TIANG' ? 'fa-tower-broadcast' : 'fa-wifi');
+        const icon = catUpper === 'ODC' ? 'fa-folder' : (catUpper === 'TIANG' ? 'fa-tower-broadcast' : (catUpper === 'MODEM' ? 'fa-house-signal' : 'fa-wifi'));
 
         buttonsHtml += `
             <button onclick="setCategoryFilter('${escapeHtml(cat)}')" class="cat-btn ${isSelected ? 'bg-blue-600 text-white font-semibold shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} px-2.5 py-1 rounded-lg text-[11px] font-medium transition flex items-center gap-1">
@@ -1228,18 +1296,20 @@ function renderCategoryManageList() {
     }
 
     manageList.innerHTML = allCats.map(cat => {
-        const isOdc = cat.toUpperCase().startsWith('ODC');
+        const catUpper = cat.toUpperCase();
+        const isSystemCat = ['ODC', 'TIANG', 'ODP', 'MODEM'].includes(catUpper);
         const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
 
         return `
             <div class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-lg transition">
                 <span class="text-xs font-semibold text-slate-700 flex items-center gap-1.5 min-w-0">
-                    <i class="fa-solid ${isOdc ? 'fa-folder text-blue-500' : (cat === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : 'fa-tag text-slate-400')} text-xs shrink-0"></i>
+                    <i class="fa-solid ${catUpper === 'ODC' ? 'fa-folder text-blue-500' : (catUpper === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : (catUpper === 'MODEM' ? 'fa-house-signal text-cyan-500' : 'fa-wifi text-emerald-500'))} text-xs shrink-0"></i>
                     <span class="truncate">${escapeHtml(cat)}</span>
                     <span class="text-[10px] text-slate-400 font-normal">(${count} berkas)</span>
+                    ${isSystemCat ? '<span class="px-1.5 py-0.2 bg-blue-50 text-blue-600 rounded text-[9px] font-bold border border-blue-200">Sistem</span>' : ''}
                 </span>
                 <div class="flex items-center gap-1.5 shrink-0 ml-2">
-                    ${canEdit ? `
+                    ${!isSystemCat && canEdit ? `
                     <button type="button" onclick="editCategoryByName('${escapeHtml(cat)}')" 
                         class="px-2 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-slate-600 hover:text-blue-600 transition flex items-center gap-1 text-[11px] shadow-2xs" 
                         title="Edit Nama Kategori: ${escapeHtml(cat)}">
@@ -1247,7 +1317,7 @@ function renderCategoryManageList() {
                         <span>Edit</span>
                     </button>
                     ` : ''}
-                    ${isOwner ? `
+                    ${!isSystemCat && isOwner ? `
                     <button type="button" onclick="deleteCategoryByName('${escapeHtml(cat)}')" 
                         class="px-2 py-1 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded text-rose-600 hover:text-rose-700 transition flex items-center gap-1 text-[11px] shadow-2xs" 
                         title="Hapus Kategori (Owner): ${escapeHtml(cat)}">
@@ -1293,11 +1363,12 @@ function renderFolderGrid() {
 
     grid.innerHTML = visibleCats.map(cat => {
         const isSelected = currentCategory === cat;
-        const isOdc = cat.toUpperCase().startsWith('ODC');
+        const catUpper = cat.toUpperCase();
+        const isSystemCat = ['ODC', 'TIANG', 'ODP', 'MODEM'].includes(catUpper);
         const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
-        const iconClass = isOdc 
+        const iconClass = catUpper === 'ODC' 
             ? 'fa-folder-closed text-blue-500' 
-            : (cat === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : 'fa-wifi text-emerald-500');
+            : (catUpper === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : (catUpper === 'MODEM' ? 'fa-house-signal text-cyan-500' : 'fa-wifi text-emerald-500'));
 
         return `
             <div onclick="setCategoryFilter('${isSelected ? 'all' : escapeHtml(cat)}')" 
@@ -1309,7 +1380,7 @@ function renderFolderGrid() {
                     <h4 class="text-[11px] font-bold text-slate-800 truncate" title="${escapeHtml(cat)}">${escapeHtml(cat)}</h4>
                     <p class="text-[9.5px] text-slate-400 font-medium">${count} berkas</p>
                 </div>
-                ${canEdit ? `
+                ${!isSystemCat && canEdit ? `
                 <div class="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition shrink-0 ml-1">
                     <button type="button" onclick="event.stopPropagation(); editCategoryByName('${escapeHtml(cat)}');" 
                         class="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-md transition shadow-2xs" 
@@ -1368,6 +1439,11 @@ async function editCategoryByName(oldName) {
     }
     
     if (!oldName) return;
+    if (['ODC', 'TIANG', 'ODP', 'MODEM'].includes(oldName.toUpperCase())) {
+        alert(`Kategori dasar "${oldName}" adalah folder sistem utama dan tidak dapat diubah namanya.`);
+        return;
+    }
+
     const newName = prompt(`Masukkan nama baru untuk kategori "${oldName}":`, oldName);
     if (!newName || !newName.trim() || newName.trim() === oldName) {
         return;
@@ -1444,6 +1520,10 @@ async function deleteCategoryByName(catName) {
     }
 
     if (!catName) return;
+    if (['ODC', 'TIANG', 'ODP', 'MODEM'].includes(catName.toUpperCase())) {
+        alert(`Kategori dasar "${catName}" adalah folder sistem utama dan tidak dapat dihapus.`);
+        return;
+    }
 
     const matchingItems = sampleData.filter(item => isItemMatchingCategory(item, catName));
     const count = matchingItems.length;
@@ -1595,12 +1675,218 @@ function filterFiles() {
     renderOdpDropdown();
 }
 
+// =====================================================================
+// RENDER TABLE ODC: Khusus folder ODC → 1 baris per unit ODC dengan
+// kolom: NAMA ODC | SHARE LOC | TAMPAK LUAR | TAMPAK DALAM |
+//        FOTO REDAMAN | FOTO LABEL | PENGUNGGAH | TANGGAL & WAKTU | AKSI
+// =====================================================================
+function setOdcTableHeader() {
+    const thead = document.getElementById('fileTableHead');
+    if (!thead) return;
+    thead.innerHTML = `
+        <tr class="bg-blue-50/80 border-b border-blue-200/80 text-blue-700 text-[10.5px] font-bold uppercase tracking-wider">
+            <th class="py-2.5 px-3 min-w-[130px]"><i class="fa-solid fa-folder mr-1 text-blue-500"></i>Nama ODC</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-location-dot mr-1 text-emerald-500"></i>Share Loc</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-door-open mr-1 text-blue-400"></i>Tampak Luar</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-boxes-stacked mr-1 text-indigo-400"></i>Tampak Dalam</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-gauge-high mr-1 text-orange-400"></i>Foto Redaman</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-tag mr-1 text-purple-400"></i>Foto Label</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-calendar mr-1 text-slate-400"></i>Tanggal &amp; Waktu</th>
+            <th class="py-2.5 px-3 text-right">Aksi</th>
+        </tr>
+    `;
+}
+
+function setDefaultTableHeader() {
+    const thead = document.getElementById('fileTableHead');
+    if (!thead) return;
+    thead.innerHTML = `
+        <tr class="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[10.5px] font-bold uppercase tracking-wider">
+            <th class="py-2.5 px-3">File Evident</th>
+            <th class="py-2.5 px-3">ID Pelanggan</th>
+            <th class="py-2.5 px-3">Nama Pelanggan</th>
+            <th class="py-2.5 px-3">SN Modem</th>
+            <th class="py-2.5 px-3">Nama ODP</th>
+            <th class="py-2.5 px-3">Kategori</th>
+            <th class="py-2.5 px-3">Pengunggah</th>
+            <th class="py-2.5 px-3">Tanggal &amp; Waktu</th>
+            <th class="py-2.5 px-3 text-right">Aksi</th>
+        </tr>
+    `;
+}
+
+// Helper: Bangun baris ODC grouped (1 baris per unit ODC)
+function buildOdcGroupedRow(odcName, items, canEdit) {
+    // Cari foto per jenis dari semua item yang termasuk unit ODC ini
+    const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const matchType = (item, ...types) => {
+        const ptype = (item.photoType || '').toUpperCase();
+        const dname = (item.deviceLabel || item.name || '').toUpperCase();
+        return types.some(t => ptype.includes(norm(t)) || dname.includes(norm(t)));
+    };
+
+    const findPhoto = (...types) => items.find(it => matchType(it, ...types)) || null;
+
+    const photoLuar  = findPhoto('TAMPAK LUAR', 'LUAR', 'DEPAN', 'OUTDOOR');
+    const photoDalam = findPhoto('TAMPAK DALAM', 'DALAM', 'INDOOR', 'BAKI', 'SPLITTER', 'TRAY');
+    const photoRed   = findPhoto('REDAMAN', 'OPM', 'LOSS', 'DBM');
+    const photoLabel = findPhoto('LABEL', 'STIKER', 'STICKER', 'PLANG');
+
+    // Share Loc: ambil dari item manapun yang punya locationUrl
+    const locItem = items.find(it => it.locationUrl) || null;
+    const locationUrl = locItem ? locItem.locationUrl : null;
+
+    // Pengunggah & Tanggal: dari item terbaru
+    const newest = items.reduce((a, b) => ((a.id || 0) > (b.id || 0) ? a : b), items[0] || {});
+
+    // Foto button builder
+    const photoBtn = (item, label, colorClass, iconClass) => item
+        ? `<button onclick="previewFile(${item.id})"
+                class="inline-flex flex-col items-center justify-center gap-0.5 w-full px-1.5 py-1.5 ${colorClass} rounded-lg font-semibold text-[10px] transition shadow-xs whitespace-nowrap cursor-pointer border"
+                title="Lihat ${label} (${item.size || '-'})">
+                <i class="fa-solid ${iconClass} text-[11px]"></i>
+                <span class="text-[9px] leading-tight">View</span>
+           </button>`
+        : `<div class="inline-flex flex-col items-center justify-center gap-0.5 w-full px-1.5 py-1.5 bg-slate-50 text-slate-300 border border-slate-200/60 rounded-lg text-[9px] opacity-60 cursor-not-allowed" title="${label} belum diupload">
+                <i class="fa-solid ${iconClass} text-[10px]"></i>
+                <span>-</span>
+           </div>`;
+
+    const luarBtn   = photoBtn(photoLuar,  'Tampak Luar',  'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200',     'fa-door-open');
+    const dalamBtn  = photoBtn(photoDalam, 'Tampak Dalam', 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200', 'fa-boxes-stacked');
+    const redBtn    = photoBtn(photoRed,   'Foto Redaman', 'bg-orange-50 hover:bg-orange-100 text-orange-800 border-orange-200', 'fa-gauge-high');
+    const labelBtn  = photoBtn(photoLabel, 'Foto Label',   'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200', 'fa-tag');
+
+    const locCell = locationUrl
+        ? `<a href="${escapeHtml(locationUrl)}" target="_blank"
+              class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold transition shadow-xs w-full"
+              title="Buka Titik Lokasi GPS">
+              <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
+              <span class="text-[9px]">Maps</span>
+           </a>`
+        : `<div class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-slate-50 text-slate-300 border border-slate-200/60 rounded-lg text-[9px] opacity-60 cursor-not-allowed w-full" title="GPS belum dibagikan">
+              <i class="fa-solid fa-location-dot text-[10px]"></i>
+              <span>-</span>
+           </div>`;
+
+    // Aksi: hapus semua evident dalam grup ini (owner only), plus preview
+    const isOwner = checkIsOwner();
+    const allIds = items.map(it => it.id).filter(Boolean);
+    const deleteGroupBtn = isOwner && allIds.length > 0
+        ? `<button onclick="deleteOdcGroup('${escapeHtml(odcName)}', [${allIds.join(',')}])"
+                class="inline-flex items-center gap-1 px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-semibold transition shadow-xs"
+                title="Hapus Semua Evident ODC ${escapeHtml(odcName)} (Owner)">
+                <i class="fa-solid fa-trash-can text-[9px]"></i>
+                <span>Hapus</span>
+           </button>`
+        : '';
+
+    const photoCount = items.length;
+
+    const tr = document.createElement('tr');
+    tr.className = 'bg-blue-50/40 hover:bg-blue-50 border-b border-blue-100 transition';
+    tr.innerHTML = `
+        <td class="py-2.5 px-3">
+            <div class="flex flex-col gap-0.5">
+                <span class="inline-flex items-center gap-1.5 font-bold text-blue-800 text-[11px]">
+                    <i class="fa-solid fa-folder-closed text-blue-500 text-[10px]"></i>
+                    ${escapeHtml(odcName)}
+                </span>
+                <span class="text-[9.5px] text-slate-400">${photoCount} foto evident</span>
+            </div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${locCell}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${luarBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${dalamBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${redBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${labelBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 font-medium text-slate-700 text-[10.5px]">${escapeHtml(newest.uploader || '-')}</td>
+        <td class="py-2.5 px-3 text-slate-400 text-[10.5px]">${escapeHtml(newest.date || '-')}</td>
+        <td class="py-2.5 px-3 text-right whitespace-nowrap">${deleteGroupBtn}</td>
+    `;
+    return tr;
+}
+
+// Helper: Hapus semua evident dalam satu grup ODC (Owner only)
+async function deleteOdcGroup(odcName, ids) {
+    if (!checkIsOwner()) return alert('Akses Ditolak: Hanya Owner yang dapat menghapus.');
+    if (!confirm(`PERINGATAN OWNER:\nHapus semua ${ids.length} foto evident untuk ${odcName}?\n\nAksi ini tidak dapat dibatalkan.`)) return;
+
+    let failed = 0;
+    for (const id of ids) {
+        try {
+            const item = sampleData.find(d => d.id === id);
+            if (item && item.fileUrl) {
+                const fileName = item.fileUrl.split('/').pop().split('?')[0];
+                try { await supabaseClient.storage.from('evidents').remove([`uploads/${decodeURIComponent(fileName)}`]); } catch (e) {}
+            }
+            const { error } = await supabaseClient.from('evidents').delete().eq('id', id);
+            if (error) failed++;
+            else sampleData = sampleData.filter(d => d.id !== id);
+        } catch (e) { failed++; }
+    }
+
+    renderCategoryUI();
+    filterFiles();
+    if (failed > 0) alert(`Selesai. ${ids.length - failed} berhasil dihapus, ${failed} gagal.`);
+    else alert(`Semua evident ODC "${odcName}" berhasil dihapus.`);
+}
+
 function renderTable(data, isSearchMode = false) {
     const tbody = document.getElementById('fileTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
 
     const canEdit = currentUserRole === 'owner' || currentUserRole === 'editor';
+
+    // ===== MODE KHUSUS: Folder ODC → Tampilkan tabel grouped per unit ODC =====
+    if (currentCategory === 'ODC' && !isSearchMode && currentOdpFilter === 'all') {
+        setOdcTableHeader();
+
+        if (!data || data.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="py-10 text-center text-slate-400">
+                        <i class="fa-solid fa-folder-open text-2xl text-slate-300 mb-1.5 block"></i>
+                        <p class="font-medium text-xs">Belum ada berkas evident ODC yang tersimpan.</p>
+                    </td>
+                </tr>
+            `;
+            updateStats();
+            return;
+        }
+
+        // Grup berdasarkan nama unit ODC
+        const odcGroups = {};
+        data.forEach(item => {
+            const unitName = getOdcUnitName(item);
+            if (!odcGroups[unitName]) odcGroups[unitName] = [];
+            odcGroups[unitName].push(item);
+        });
+
+        // Urutkan nama ODC secara alfabetis
+        const sortedNames = Object.keys(odcGroups).sort((a, b) => a.localeCompare(b));
+        sortedNames.forEach(name => {
+            tbody.appendChild(buildOdcGroupedRow(name, odcGroups[name], canEdit));
+        });
+
+        updateStats();
+        return;
+    }
+
+    // ===== MODE NORMAL: kembalikan header default =====
+    setDefaultTableHeader();
 
     if (!data || data.length === 0) {
         tbody.innerHTML = `
