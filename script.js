@@ -13,6 +13,34 @@ let currentOdpFilter = 'all';
 let categorySearchQuery = '';
 let currentPreviewId = null;
 
+// Cache kategori yang telah dihapus permanen oleh Owner
+let deletedCategoriesSet = new Set();
+try {
+    const rawDeleted = localStorage.getItem('evident_deleted_categories');
+    if (rawDeleted) {
+        JSON.parse(rawDeleted).forEach(c => {
+            if (c) deletedCategoriesSet.add(c.toString().trim().toUpperCase());
+        });
+    }
+} catch (e) {}
+
+// Fungsi helper: Cek apakah user saat ini adalah Owner Project
+function checkIsOwner() {
+    if (currentUserRole === 'owner') return true;
+    const currentEmail = (currentUser && currentUser.email) ? currentUser.email.toLowerCase().trim() : '';
+    const ownerEmail = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.ownerEmail) ? APP_CONFIG.ownerEmail.toLowerCase().trim() : 'mahawira2nusantara@gmail.com';
+    if (currentEmail && currentEmail === ownerEmail) return true;
+    
+    try {
+        const persistedEmail = (sessionStorage.getItem("evident_user_email") || localStorage.getItem("evident_persisted_email") || '').toLowerCase().trim();
+        if (persistedEmail && persistedEmail === ownerEmail) return true;
+        const persistedRole = (sessionStorage.getItem("evident_user_role") || localStorage.getItem("evident_persisted_role") || '').toLowerCase().trim();
+        if (persistedRole === 'owner') return true;
+    } catch (e) {}
+    
+    return false;
+}
+
 // Fungsi helper: Simpan sesi login (sessionStorage untuk tab, localStorage token khusus deteksi refresh)
 function saveAuthSession(email, role) {
     const cleanEmail = (email || '').trim().toLowerCase();
@@ -552,7 +580,7 @@ function openCustomerHistoryModal(customerId, customerName, modemSn) {
     } else {
         timelineContainer.innerHTML = relatedEvidents.map(ev => {
             const fmt = formatEvidentDisplay(ev);
-            const isOwner = currentUserRole === 'owner';
+            const isOwner = checkIsOwner();
             const statusBadge = ev.status === 'Disetujui'
                 ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-[9px]"></i> Disetujui</span>`
                 : ev.status === 'Ditolak'
@@ -602,7 +630,7 @@ function openCustomerHistoryModal(customerId, customerName, modemSn) {
 
 // Fungsi Hapus Evident Khusus Owner
 async function deleteEvident(id) {
-    if (currentUserRole !== 'owner') {
+    if (!checkIsOwner()) {
         return alert('Akses Ditolak: Hanya Owner dashboard yang memiliki izin menghapus berkas evident!');
     }
 
@@ -849,13 +877,15 @@ function grantDashboardAccess() {
     const badge = document.getElementById('userRoleBadge');
     badge.innerText = (currentUserRole || 'editor').toUpperCase();
 
-    if (currentUserRole === 'owner') {
+    const isOwner = checkIsOwner();
+    if (isOwner) {
+        currentUserRole = 'owner';
         document.getElementById('shareBtn').classList.remove('hidden');
     } else {
         document.getElementById('shareBtn').classList.add('hidden');
     }
 
-    const isEditorOrOwner = currentUserRole === 'owner' || currentUserRole === 'editor';
+    const isEditorOrOwner = isOwner || currentUserRole === 'editor';
     document.querySelectorAll('.role-editor').forEach(el => {
         if (isEditorOrOwner) el.classList.remove('hidden');
         else el.classList.add('hidden');
@@ -1060,24 +1090,37 @@ function getItemOdcGroup(item) {
 // Kumpulkan seluruh kategori ODC & non-ODC dinamis
 function extractAllCategories() {
     const odcSet = new Set();
-    // TIANG & MODEM selalu tampil di filter tab (MODEM bisa jadi sub-item di folder ODC)
-    const otherSet = new Set(['TIANG', 'MODEM']);
+    const otherSet = new Set();
 
     (categories || []).forEach(c => {
+        if (!c) return;
+        const norm = c.trim().toUpperCase();
+        if (deletedCategoriesSet.has(norm)) return;
         const odc = normalizeOdc(c);
-        if (odc) odcSet.add(odc);
-        else if (c && c !== 'ODC' && c !== 'ODP') otherSet.add(c.trim().toUpperCase());
+        if (odc) {
+            if (!deletedCategoriesSet.has(odc.toUpperCase())) odcSet.add(odc);
+        } else if (norm !== 'ODC' && norm !== 'ODP') {
+            otherSet.add(norm);
+        }
     });
 
     (sampleData || []).forEach(item => {
         const odc = getItemOdcGroup(item);
         if (odc) {
-            odcSet.add(odc);
+            if (!deletedCategoriesSet.has(odc.toUpperCase())) odcSet.add(odc);
         } else {
             const cat = (item.category || '').trim().toUpperCase();
-            if (cat && cat !== 'ODC' && cat !== 'ODP') otherSet.add(cat);
+            if (cat && cat !== 'ODC' && cat !== 'ODP' && !deletedCategoriesSet.has(cat)) {
+                otherSet.add(cat);
+            }
         }
     });
+
+    // Pastikan jika belum ada kategori apa pun dan belum dihapus, tambahkan default
+    if (odcSet.size === 0 && otherSet.size === 0) {
+        if (!deletedCategoriesSet.has('TIANG')) otherSet.add('TIANG');
+        if (!deletedCategoriesSet.has('MODEM')) otherSet.add('MODEM');
+    }
 
     const sortedOdc = Array.from(odcSet).sort();
     const sortedOther = Array.from(otherSet).sort();
@@ -1129,23 +1172,61 @@ function renderCategoryUI() {
         catSelect.innerHTML = allCats.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
     }
 
+    renderCategoryManageList();
+}
+
+function renderCategoryManageList() {
     const manageList = document.getElementById('categoryManageList');
-    if (manageList) {
-        manageList.innerHTML = allCats.map((cat, idx) => `
-            <div class="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-                <span class="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <i class="fa-solid ${cat.startsWith('ODC-') ? 'fa-folder text-blue-500' : 'fa-tag text-slate-400'} text-xs"></i>
-                    ${escapeHtml(cat)}
+    if (!manageList) return;
+
+    const allCats = extractAllCategories();
+    const isOwner = checkIsOwner();
+    const canEdit = isOwner || currentUserRole === 'editor';
+
+    if (allCats.length === 0) {
+        manageList.innerHTML = `
+            <div class="text-center py-4 text-xs text-slate-400">
+                Belum ada kategori yang terdaftar.
+            </div>
+        `;
+        return;
+    }
+
+    manageList.innerHTML = allCats.map(cat => {
+        const isOdc = cat.toUpperCase().startsWith('ODC-');
+        const count = sampleData.filter(item => {
+            if (isOdc) return getItemOdcGroup(item) === cat || item.category === cat;
+            return (item.category || '').toUpperCase() === cat.toUpperCase();
+        }).length;
+
+        return `
+            <div class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-lg transition">
+                <span class="text-xs font-semibold text-slate-700 flex items-center gap-1.5 min-w-0">
+                    <i class="fa-solid ${isOdc ? 'fa-folder text-blue-500' : (cat === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : 'fa-tag text-slate-400')} text-xs shrink-0"></i>
+                    <span class="truncate">${escapeHtml(cat)}</span>
+                    <span class="text-[10px] text-slate-400 font-normal">(${count} berkas)</span>
                 </span>
-                <div class="flex items-center gap-1">
-                    <button onclick="editCategory(${idx})" class="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition" title="Edit Nama Kategori"><i class="fa-solid fa-pen text-xs"></i></button>
-                    ${currentUserRole === 'owner' ? `
-                    <button onclick="deleteCategory(${idx})" class="p-1 hover:bg-rose-100 rounded text-rose-500 hover:text-rose-700 transition" title="Hapus Kategori (Owner Project)"><i class="fa-solid fa-trash text-xs"></i></button>
+                <div class="flex items-center gap-1.5 shrink-0 ml-2">
+                    ${canEdit ? `
+                    <button type="button" onclick="editCategoryByName('${escapeHtml(cat)}')" 
+                        class="px-2 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-slate-600 hover:text-blue-600 transition flex items-center gap-1 text-[11px] shadow-2xs" 
+                        title="Edit Nama Kategori: ${escapeHtml(cat)}">
+                        <i class="fa-solid fa-pen text-[10px] text-blue-500"></i>
+                        <span>Edit</span>
+                    </button>
+                    ` : ''}
+                    ${isOwner ? `
+                    <button type="button" onclick="deleteCategoryByName('${escapeHtml(cat)}')" 
+                        class="px-2 py-1 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded text-rose-600 hover:text-rose-700 transition flex items-center gap-1 text-[11px] shadow-2xs" 
+                        title="Hapus Kategori (Owner): ${escapeHtml(cat)}">
+                        <i class="fa-solid fa-trash text-[10px]"></i>
+                        <span>Hapus</span>
+                    </button>
                     ` : ''}
                 </div>
             </div>
-        `).join('');
-    }
+        `;
+    }).join('');
 }
 
 // Render navigasi folder visual Google Drive Style di dashboard
@@ -1175,6 +1256,9 @@ function renderFolderGrid() {
         return;
     }
 
+    const isOwner = checkIsOwner();
+    const canEdit = isOwner || currentUserRole === 'editor';
+
     grid.innerHTML = visibleCats.map(cat => {
         const isSelected = currentCategory === cat;
         const isOdc = cat.toUpperCase().startsWith('ODC-');
@@ -1190,7 +1274,7 @@ function renderFolderGrid() {
 
         return `
             <div onclick="setCategoryFilter('${isSelected ? 'all' : escapeHtml(cat)}')" 
-                class="cursor-pointer p-2.5 rounded-xl border transition flex items-center gap-2 select-none ${isSelected ? 'bg-blue-50/90 border-blue-400 shadow-sm ring-2 ring-blue-500/20' : 'bg-white hover:bg-slate-50 border-slate-200/80 hover:border-slate-300 shadow-xs'}">
+                class="group relative cursor-pointer p-2.5 rounded-xl border transition flex items-center gap-2 select-none ${isSelected ? 'bg-blue-50/90 border-blue-400 shadow-sm ring-2 ring-blue-500/20' : 'bg-white hover:bg-slate-50 border-slate-200/80 hover:border-slate-300 shadow-xs'}">
                 <div class="w-7 h-7 rounded-lg ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100'} flex items-center justify-center text-xs shadow-xs shrink-0">
                     <i class="fa-solid ${isSelected ? 'fa-folder-open' : iconClass}"></i>
                 </div>
@@ -1198,6 +1282,22 @@ function renderFolderGrid() {
                     <h4 class="text-[11px] font-bold text-slate-800 truncate" title="${escapeHtml(cat)}">${escapeHtml(cat)}</h4>
                     <p class="text-[9.5px] text-slate-400 font-medium">${count} berkas</p>
                 </div>
+                ${canEdit ? `
+                <div class="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition shrink-0 ml-1">
+                    <button type="button" onclick="event.stopPropagation(); editCategoryByName('${escapeHtml(cat)}');" 
+                        class="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-md transition shadow-2xs" 
+                        title="Edit Nama Kategori: ${escapeHtml(cat)}">
+                        <i class="fa-solid fa-pen text-[9.5px]"></i>
+                    </button>
+                    ${isOwner ? `
+                    <button type="button" onclick="event.stopPropagation(); deleteCategoryByName('${escapeHtml(cat)}');" 
+                        class="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 rounded-md transition shadow-2xs" 
+                        title="Hapus Kategori (Owner): ${escapeHtml(cat)}">
+                        <i class="fa-solid fa-trash text-[9.5px]"></i>
+                    </button>
+                    ` : ''}
+                </div>
+                ` : ''}
             </div>
         `;
     }).join('');
@@ -1212,77 +1312,182 @@ function setCategoryFilter(cat) {
 }
 
 async function addNewCategory() {
-    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') return alert('Akses ditolak!');
+    if (!checkIsOwner() && currentUserRole !== 'editor') return alert('Akses ditolak: Hanya Owner dan Editor yang dapat menambah kategori!');
     const input = document.getElementById('newCategoryInput');
     const name = input.value.trim();
     if (!name) return alert('Nama kategori tidak boleh kosong!');
     if (categories.includes(name)) return alert('Kategori tersebut sudah ada!');
 
-    const { error } = await supabaseClient.from('categories').insert({ name: name });
-    if (error) {
-        alert("Gagal menambah kategori ke Supabase: " + error.message);
+    try {
+        const { error } = await supabaseClient.from('categories').insert({ name: name });
+        if (error) {
+            console.warn("Gagal simpan kategori ke Supabase:", error.message);
+        }
+        if (deletedCategoriesSet.has(name.toUpperCase())) {
+            deletedCategoriesSet.delete(name.toUpperCase());
+            localStorage.setItem('evident_deleted_categories', JSON.stringify([...deletedCategoriesSet]));
+        }
+        categories.push(name);
+        input.value = '';
+        renderCategoryUI();
+        filterFiles();
+        alert(`Kategori "${name}" berhasil ditambahkan!`);
+    } catch (e) {
+        alert("Error menambah kategori: " + e.message);
+    }
+}
+
+async function editCategoryByName(oldName) {
+    if (!checkIsOwner() && currentUserRole !== 'editor') {
+        alert('Akses Ditolak: Hanya Owner Project atau Editor yang dapat mengedit nama kategori!');
+        return;
+    }
+    
+    const newName = prompt(`Masukkan nama baru untuk kategori "${oldName}":`, oldName);
+    if (!newName || !newName.trim() || newName.trim() === oldName) {
+        return;
+    }
+    const trimmed = newName.trim();
+
+    try {
+        if (deletedCategoriesSet.has(trimmed.toUpperCase())) {
+            deletedCategoriesSet.delete(trimmed.toUpperCase());
+            localStorage.setItem('evident_deleted_categories', JSON.stringify([...deletedCategoriesSet]));
+        }
+
+        // 1. Update atau insert di tabel categories Supabase
+        await supabaseClient
+            .from('categories')
+            .update({ name: trimmed })
+            .ilike('name', oldName);
+            
+        const { data: existRows } = await supabaseClient
+            .from('categories')
+            .select('id')
+            .ilike('name', trimmed);
+        if (!existRows || existRows.length === 0) {
+            await supabaseClient.from('categories').insert({ name: trimmed });
+        }
+
+        // 2. Update berkas evident di Supabase
+        await supabaseClient
+            .from('evidents')
+            .update({ category: trimmed })
+            .ilike('category', oldName);
+
+        const altOldName = oldName.includes('-') ? oldName.replace(/-/g, ' ') : oldName.replace(/\s+/g, '-');
+        if (altOldName !== oldName) {
+            await supabaseClient
+                .from('evidents')
+                .update({ category: trimmed })
+                .ilike('category', altOldName);
+        }
+
+        // 3. Update memory lokal
+        categories = categories.map(c => {
+            if (c.toLowerCase() === oldName.toLowerCase() || c.toLowerCase() === altOldName.toLowerCase()) {
+                return trimmed;
+            }
+            return c;
+        });
+        if (!categories.includes(trimmed)) categories.push(trimmed);
+
+        sampleData.forEach(item => {
+            if ((item.category && item.category.toLowerCase() === oldName.toLowerCase()) || 
+                (item.category && item.category.toLowerCase() === altOldName.toLowerCase())) {
+                item.category = trimmed;
+            }
+            if (item.odc_reference && item.odc_reference.toLowerCase() === oldName.toLowerCase()) {
+                item.odc_reference = trimmed;
+            }
+        });
+
+        if (currentCategory.toLowerCase() === oldName.toLowerCase() || currentCategory.toLowerCase() === altOldName.toLowerCase()) {
+            currentCategory = trimmed;
+        }
+
+        renderCategoryUI();
+        filterFiles();
+        alert(`Sukses! Kategori "${oldName}" telah diubah menjadi "${trimmed}".`);
+    } catch (err) {
+        console.error("Gagal edit kategori:", err);
+        alert("Gagal mengubah nama kategori: " + (err.message || err));
+    }
+}
+
+async function deleteCategoryByName(catName) {
+    if (!checkIsOwner()) {
+        alert('Akses Ditolak: Fitur hapus kategori hanya dapat dilakukan oleh Owner Project!');
         return;
     }
 
-    categories.push(name);
-    input.value = '';
-    renderCategoryUI();
-    filterFiles();
-}
+    const isOdc = catName.toUpperCase().startsWith('ODC-');
+    const count = sampleData.filter(item => {
+        if (isOdc) return getItemOdcGroup(item) === catName || item.category === catName;
+        return (item.category || '').toUpperCase() === catName.toUpperCase();
+    }).length;
 
-async function editCategory(index) {
-    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') return alert('Akses ditolak!');
-    const allCats = extractAllCategories();
-    const oldName = allCats[index];
-    const newName = prompt('Masukkan nama kategori baru:', oldName);
-    if (newName && newName.trim() !== '' && newName !== oldName) {
-        const trimmed = newName.trim();
-        const { error } = await supabaseClient.from('categories').update({ name: trimmed }).eq('name', oldName);
-        if (error) {
-            alert("Gagal memperbarui kategori: " + error.message);
-            return;
+    const altCatName = catName.includes('-') ? catName.replace(/-/g, ' ') : catName.replace(/\s+/g, '-');
+
+    const msg = `PERINGATAN OWNER PROJECT:\nApakah Anda yakin ingin menghapus kategori "${catName}"?\n` +
+        (count > 0 ? `\nTerdapat ${count} berkas evident di dalam kategori ini yang akan ikut dihapus.` : '\nKategori ini akan dihapus dari sistem.') +
+        `\n\nKlik OK untuk menghapus.`;
+
+    if (!confirm(msg)) return;
+
+    try {
+        // 1. Hapus dari tabel categories Supabase
+        await supabaseClient.from('categories').delete().ilike('name', catName);
+        if (altCatName !== catName) {
+            await supabaseClient.from('categories').delete().ilike('name', altCatName);
         }
 
-        sampleData.forEach(item => { if (item.category === oldName) item.category = trimmed; });
-        if (currentCategory === oldName) currentCategory = trimmed;
-        await fetchSupabaseData();
-    }
-}
-
-async function deleteCategory(index) {
-    if (currentUserRole !== 'owner') {
-        return alert('Akses Ditolak: Fitur hapus kategori hanya dapat dilakukan oleh Owner Project!');
-    }
-    const allCats = extractAllCategories();
-    const catName = allCats[index];
-    if (!catName) return;
-
-    if (confirm(`PERINGATAN OWNER PROJECT:\nApakah Anda yakin ingin menghapus kategori "${catName}"?\n\nKategori ini akan dihapus dari sistem.`)) {
-        // 1. Hapus dari database tabel categories
-        const { error } = await supabaseClient.from('categories').delete().eq('name', catName);
-        if (error) {
-            console.warn("Hapus kategori dari Supabase:", error.message);
+        // 2. Hapus berkas evident di Supabase untuk kategori ini
+        await supabaseClient.from('evidents').delete().ilike('category', catName);
+        if (altCatName !== catName) {
+            await supabaseClient.from('evidents').delete().ilike('category', altCatName);
+        }
+        if (isOdc) {
+            await supabaseClient.from('evidents').delete().ilike('odc_reference', catName);
         }
 
-        // 2. Update berkas evident yang menggunakan kategori ini agar tidak orphan
-        await supabaseClient
-            .from('evidents')
-            .update({ category: 'UMUM' })
-            .eq('category', catName);
+        // 3. Masukkan ke deletedCategoriesSet agar tidak muncul lagi
+        deletedCategoriesSet.add(catName.toUpperCase());
+        if (altCatName) deletedCategoriesSet.add(altCatName.toUpperCase());
+        localStorage.setItem('evident_deleted_categories', JSON.stringify([...deletedCategoriesSet]));
 
-        // 3. Update memory lokal
-        categories = categories.filter(c => c !== catName);
-        sampleData.forEach(item => {
-            if (item.category === catName) item.category = 'UMUM';
+        // 4. Update memory lokal
+        categories = categories.filter(c => c.toUpperCase() !== catName.toUpperCase() && c.toUpperCase() !== altCatName.toUpperCase());
+        sampleData = sampleData.filter(item => {
+            const itemCat = (item.category || '').toUpperCase();
+            const itemOdc = getItemOdcGroup(item).toUpperCase();
+            return itemCat !== catName.toUpperCase() && 
+                   itemCat !== altCatName.toUpperCase() &&
+                   itemOdc !== catName.toUpperCase();
         });
 
-        if (currentCategory === catName) currentCategory = 'all';
+        if (currentCategory.toUpperCase() === catName.toUpperCase() || currentCategory.toUpperCase() === altCatName.toUpperCase()) {
+            currentCategory = 'all';
+        }
 
-        await fetchSupabaseData();
         renderCategoryUI();
         filterFiles();
-        alert(`Kategori "${catName}" berhasil dihapus dari sistem.`);
+        alert(`Sukses! Kategori "${catName}" berhasil dihapus dari sistem.`);
+    } catch (err) {
+        console.error("Gagal menghapus kategori:", err);
+        alert("Gagal menghapus kategori: " + (err.message || err));
     }
+}
+
+// Wrapper index untuk kompatibilitas jika ada pemicu lama
+function editCategory(index) {
+    const allCats = extractAllCategories();
+    if (allCats[index]) editCategoryByName(allCats[index]);
+}
+
+function deleteCategory(index) {
+    const allCats = extractAllCategories();
+    if (allCats[index]) deleteCategoryByName(allCats[index]);
 }
 
 function clearSearch() {
@@ -1670,7 +1875,7 @@ function buildRow(item, canEdit, isOdcHeader = false, isChild = false) {
                 <i class="fa-solid fa-clock-rotate-left text-xs"></i>
             </button>
             ` : ''}
-            ${currentUserRole === 'owner' ? `
+            ${checkIsOwner() ? `
             <button onclick="deleteEvident(${item.id})" class="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition ml-1 inline-flex items-center justify-center" title="Hapus Evident Permanen (Owner)">
                 <i class="fa-solid fa-trash-can text-xs"></i>
             </button>
@@ -1874,7 +2079,7 @@ function previewFile(id) {
     // Tombol hapus evident khusus owner di modal preview
     const delBtn = document.getElementById('deleteFromPreviewBtn');
     if (delBtn) {
-        if (currentUserRole === 'owner') delBtn.classList.remove('hidden');
+        if (checkIsOwner()) delBtn.classList.remove('hidden');
         else delBtn.classList.add('hidden');
     }
 
@@ -1960,7 +2165,12 @@ async function handleUpload(e) {
 
 function openModal(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.classList.remove('hidden');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (id === 'categoryModal') {
+            renderCategoryManageList();
+        }
+    }
 }
 
 function closeModal(id) {
