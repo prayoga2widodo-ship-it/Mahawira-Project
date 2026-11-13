@@ -304,5 +304,77 @@
     "deviceLabel": "ODP-SKD 01/03 [LABEL]",
     "date": "12/11/2026, 14.57.31",
     "fileName": "evident_ODP-SKD_01_03_[LABEL]_[H:d265c03c210b0a7b][DH:3ef80efdcb7f02e9]_1794470250914.jpg"
+  },
+  {
+    "sha256": "4fe823251e46857fd790e432f2b483648fb5e2d43516d840e2d94bb7996ab4b2",
+    "dhash": "fb1dcdcedae6faee",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 01 [TAMPAK LUAR]",
+    "date": "13/11/2026, 10.31.42",
+    "fileName": "evident_ODC-SKD_01_[TAMPAK_LUAR]_[H:4fe823251e46857f][DH:fb1dcdcedae6faee]_1794540701034.jpg"
+  },
+  {
+    "sha256": "21922faf44304c38fa1c4d5009e63e493790fec99f0ea7681b0eb5d8466815ec",
+    "dhash": "ffaf1f8784a9e465",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 01 [TAMPAK DALAM]",
+    "date": "13/11/2026, 10.32.01",
+    "fileName": "evident_ODC-SKD_01_[TAMPAK_DALAM]_[H:21922faf44304c38][DH:ffaf1f8784a9e465]_1794540720670.jpg"
+  },
+  {
+    "sha256": "c72eb8f9a8b2f97d6c655d3dcdd37c4cfd677798564c3b9182617c46a71a3de9",
+    "dhash": "a8a898988890e8f1",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 01 [REDAMAN]",
+    "date": "13/11/2026, 10.32.15",
+    "fileName": "evident_ODC-SKD_01_[REDAMAN]_[H:c72eb8f9a8b2f97d][DH:a8a898988890e8f1]_1794540734487.jpg"
+  },
+  {
+    "sha256": "7c9bbcc538269ec4267077d79a2b42e3803d73122191ff354fcc74e8bea517ec",
+    "dhash": "c20371db99bbf3f9",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 01 [LABEL]",
+    "date": "13/11/2026, 10.32.26",
+    "fileName": "evident_ODC-SKD_01_[LABEL]_[H:7c9bbcc538269ec4][DH:c20371db99bbf3f9]_1794540746242.jpg"
+  },
+  {
+    "sha256": "dbc759d0e4e65bdd2fd81f88218ae0d4c640a6b1888397a298834a19edf270d2",
+    "dhash": "178eccc48c8d39b9",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 02 [TAMPAK LUAR]",
+    "date": "13/11/2026, 10.41.38",
+    "fileName": "evident_ODC-SKD_02_[TAMPAK_LUAR]_[H:dbc759d0e4e65bdd][DH:178eccc48c8d39b9]_1794541298040.jpg"
+  },
+  {
+    "sha256": "d943553a3219a789f9e05c3e6332756fab48ffed764bae26b7ed68d304379d06",
+    "dhash": "0fcaf8f08c9431b1",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 02 [TAMPAK DALAM]",
+    "date": "13/11/2026, 10.41.48",
+    "fileName": "evident_ODC-SKD_02_[TAMPAK_DALAM]_[H:d943553a3219a789][DH:0fcaf8f08c9431b1]_1794541308192.jpg"
+  },
+  {
+    "sha256": "4df20609056cfba77da847ef3f98ab8e1993af0b116b23abf5ca504f1ea8ecf1",
+    "dhash": "1f0f0c79e9b93979",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 02 [REDAMAN]",
+    "date": "13/11/2026, 10.41.57",
+    "fileName": "evident_ODC-SKD_02_[REDAMAN]_[H:4df20609056cfba7][DH:1f0f0c79e9b93979]_1794541316640.jpg"
+  },
+  {
+    "sha256": "62962b16160bab9ff11ecfb88cd62e6602af4d214c96dd9228fabbe2bd9fbd98",
+    "dhash": "0758752da9f93979",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC",
+    "deviceLabel": "ODC-SKD 02 [LABEL]",
+    "date": "13/11/2026, 10.42.06",
+    "fileName": "evident_ODC-SKD_02_[LABEL]_[H:62962b16160bab9f][DH:0758752da9f93979]_1794541325673.jpg"
   }
 ]

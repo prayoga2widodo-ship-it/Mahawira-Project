@@ -221,11 +221,25 @@ function buildPhotoTypeMenu(category, label, completedTypes = [], hasLocation = 
     const totalDone = done.length;
 
     const rows = [];
-    const isOdc = (category || '').toUpperCase().startsWith('ODC');
+    const catUp = (category || '').toUpperCase();
+    const isOdc = catUp.startsWith('ODC');
+    const isOdp = catUp === 'ODP';
 
     if (isOdc) {
         rows.push([
             Markup.button.callback(`📍 Share Loc ODC${hasLocation ? ' ✅' : ' (Wajib)'}`, 'action_odc_shareloc')
+        ]);
+        rows.push([
+            Markup.button.callback(`🚪 1. Tampak Luar / Depan${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
+            Markup.button.callback(`📦 2. Tampak Dalam${mark('TAMPAK DALAM')}`, 'action_type:TAMPAK DALAM')
+        ]);
+        rows.push([
+            Markup.button.callback(`📟 3. Foto Redaman${mark('REDAMAN')}`, 'action_type:REDAMAN'),
+            Markup.button.callback(`🏷 4. Foto Label${mark('LABEL')}`, 'action_type:LABEL')
+        ]);
+    } else if (isOdp) {
+        rows.push([
+            Markup.button.callback(`📍 Share Loc ODP${hasLocation ? ' ✅' : ' (Wajib)'}`, 'action_odp_shareloc')
         ]);
         rows.push([
             Markup.button.callback(`🚪 1. Tampak Luar / Depan${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
@@ -1949,6 +1963,34 @@ bot.command(['batal', 'cancel'], async (ctx) => {
 // 7.B ACTION & COMMAND UNTUK FOTO TAMPAK LUAR, DALAM, REDAMAN, LABEL
 // ==========================================================
 
+// Handler Share Loc ODP
+bot.action('action_odp_shareloc', async (ctx) => {
+    await ctx.answerCbQuery();
+    const chatId = ctx.chat.id.toString();
+    const session = getSession(chatId);
+
+    if (!session.deviceLabel) {
+        return ctx.reply("⚠️ Sesi telah berakhir atau label belum dimasukkan. Silakan pilih menu:", buildMainInlineMenu());
+    }
+
+    session.step = 'waiting_location_odp';
+
+    await ctx.reply(
+        `📍 *BAGIKAN TITIK LOKASI GPS (SHARE LOC) ODP*\n\n` +
+        `🏷️ *Perangkat ODP:* \`${session.deviceLabel}\`\n\n` +
+        `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
+        `Harap bagikan titik lokasi GPS ODP terlebih dahulu sebelum mengambil Foto ODP Tampak Luar / Depan.\n\n` +
+        `👇 *Silakan tekan tombol di bawah untuk membagikan lokasi GPS Anda:*`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.keyboard([
+                [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
+                ['❌ Batalkan Sesi']
+            ]).resize().oneTime()
+        }
+    );
+});
+
 // Handler Share Loc ODC
 bot.action('action_odc_shareloc', async (ctx) => {
     await ctx.answerCbQuery();
@@ -1988,8 +2030,10 @@ bot.action(/action_type:(.+)/, async (ctx) => {
         return ctx.reply("⚠️ Sesi telah berakhir atau label belum dimasukkan. Silakan pilih menu:", buildMainInlineMenu());
     }
 
-    // SOP ODC: Wajib Share Loc sebelum upload Tampak Luar / Depan
+    // SOP ODC & ODP: Wajib Share Loc sebelum upload Tampak Luar / Depan
     const isOdcCat = (session.category || '').toUpperCase().startsWith('ODC');
+    const isOdpCat = (session.category || '').toUpperCase() === 'ODP';
+
     if (isOdcCat && type === 'TAMPAK LUAR' && !session.locationUrl && !session.latitude) {
         session.step = 'waiting_location_odc';
         return ctx.reply(
@@ -2002,6 +2046,24 @@ bot.action(/action_type:(.+)/, async (ctx) => {
                 parse_mode: 'Markdown',
                 ...Markup.keyboard([
                     [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                    ['❌ Batalkan Sesi']
+                ]).resize().oneTime()
+            }
+        );
+    }
+
+    if (isOdpCat && type === 'TAMPAK LUAR' && !session.locationUrl && !session.latitude) {
+        session.step = 'waiting_location_odp';
+        return ctx.reply(
+            `📍 *SHARE LOC DIBUTUHKAN TERLEBIH DAHULU*\n\n` +
+            `🏷️ *Perangkat ODP:* \`${session.deviceLabel}\`\n\n` +
+            `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
+            `Sebelum mengunggah Foto ODP Tampak Depan / Luar, teknisi wajib membagikan titik lokasi GPS ODP di lapangan.\n\n` +
+            `👇 *Silakan tekan tombol di bawah untuk membagikan titik lokasi GPS ODP:*`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
                     ['❌ Batalkan Sesi']
                 ]).resize().oneTime()
             }
@@ -2609,13 +2671,49 @@ bot.on('text', async (ctx, next) => {
 });
 
 // ==========================================================
-// 9. LISTENER LOKASI (GPS UNTUK ODC & TIANG)
+// 9. LISTENER LOKASI (GPS UNTUK ODC, ODP & TIANG)
 // ==========================================================
 bot.on('location', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
 
-    // 1. Tangani Lokasi GPS untuk ODC (Share Loc sebelum Foto Tampak Luar/Depan)
+    // 1. Tangani Lokasi GPS untuk ODP (Share Loc sebelum Foto Tampak Luar/Depan)
+    const isOdpSession = (session.category || '').toUpperCase() === 'ODP' || session.step === 'waiting_location_odp';
+    if (isOdpSession && (session.step === 'waiting_location_odp' || !session.locationUrl)) {
+        const loc = ctx.message.location;
+        const lat = loc.latitude;
+        const lng = loc.longitude;
+        const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+
+        session.latitude = lat;
+        session.longitude = lng;
+        session.locationUrl = mapsUrl;
+        session.photoType = 'TAMPAK LUAR';
+        session.step = 'waiting_photo';
+
+        await ctx.reply(
+            `✅ *LOKASI GPS ODP BERHASIL DITERIMA & DISIMPAN!*\n\n` +
+            `🏷️ *Perangkat ODP:* \`${session.deviceLabel || 'ODP'}\`\n` +
+            `📍 *Titik Koordinat:* \`${lat}, ${lng}\`\n` +
+            `🗺️ *Google Maps:* [Buka Peta Lokasi](${mapsUrl})\n\n` +
+            `🚪 *SEKARANG, SILAKAN AMBIL / KIRIMKAN FOTO ODP TAMPAK LUAR (DEPAN):*\n` +
+            `💡 *Tips:* Pastikan pintu ODP tertutup rapi dan fisik box ODP terlihat jelas dan utuh.`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.removeKeyboard()
+            }
+        );
+
+        return ctx.reply(
+            `📸 *Silakan ambil / kirimkan foto ${session.deviceLabel} Tampak Luar (Depan) sekarang:*`,
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔙 Pilih Jenis Foto Lain', 'action_back_types')],
+                [Markup.button.callback('❌ Batal', 'action_cancel')]
+            ])
+        );
+    }
+
+    // 2. Tangani Lokasi GPS untuk ODC (Share Loc sebelum Foto Tampak Luar/Depan)
     const isOdcSession = (session.category || '').toUpperCase().startsWith('ODC');
     if (isOdcSession && (session.step === 'waiting_location_odc' || session.step === 'waiting_location' || !session.locationUrl)) {
         const loc = ctx.message.location;

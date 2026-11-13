@@ -1673,6 +1673,212 @@ function filterFiles() {
     renderTable(filtered, Boolean(query) || currentOdpFilter !== 'all');
     renderFolderGrid();
     renderOdpDropdown();
+    renderOdcDropdownInSearch();
+}
+
+// Render dropdown ODC di area pencarian (untuk filter ODP berdasarkan induk ODC)
+function renderOdcDropdownInSearch() {
+    const dropdown = document.getElementById('odcSearchDropdown');
+    if (!dropdown) return;
+
+    // Hanya tampil saat folder ODP aktif
+    const container = document.getElementById('odcSearchDropdownContainer');
+    if (container) {
+        if (currentCategory === 'ODP') {
+            container.classList.remove('hidden');
+        } else {
+            container.classList.add('hidden');
+        }
+    }
+
+    if (currentCategory !== 'ODP') return;
+
+    // Kumpulkan nama ODC unik dari data
+    const odcSet = new Set();
+    sampleData.forEach(item => {
+        const ref = item.odcReference || item.odc_reference || '';
+        if (ref && ref.toUpperCase().startsWith('ODC')) {
+            odcSet.add(ref.trim());
+        }
+        const cat = item.category || '';
+        if (cat.toUpperCase().startsWith('ODC')) {
+            odcSet.add(cat.trim());
+        }
+    });
+
+    const odcList = Array.from(odcSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const currentVal = dropdown.value;
+
+    dropdown.innerHTML = `<option value="all">🌐 Semua ODC (${odcList.length} ODC)</option>`;
+    odcList.forEach(odc => {
+        const opt = document.createElement('option');
+        opt.value = odc;
+        opt.textContent = `📡 ${odc}`;
+        if (odc === currentVal) opt.selected = true;
+        dropdown.appendChild(opt);
+    });
+}
+
+// =====================================================================
+// RENDER TABLE ODP: Khusus folder ODP → 1 baris per unit ODP dengan
+// kolom: NAMA ODP | INDUK ODC | SHARE LOC | TAMPAK LUAR | TAMPAK DALAM |
+//        FOTO REDAMAN | FOTO LABEL | PENGUNGGAH | TANGGAL & WAKTU | AKSI
+// =====================================================================
+function setOdpTableHeader() {
+    const thead = document.getElementById('fileTableHead');
+    if (!thead) return;
+    thead.innerHTML = `
+        <tr class="bg-green-50/80 border-b border-green-200/80 text-green-700 text-[10.5px] font-bold uppercase tracking-wider">
+            <th class="py-2.5 px-3 min-w-[130px]"><i class="fa-solid fa-folder mr-1 text-green-500"></i>Nama ODP</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-network-wired mr-1 text-blue-400"></i>Induk ODC</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-location-dot mr-1 text-emerald-500"></i>Share Loc</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-door-open mr-1 text-blue-400"></i>Tampak Luar</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-boxes-stacked mr-1 text-indigo-400"></i>Tampak Dalam</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-gauge-high mr-1 text-orange-400"></i>Foto Redaman</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-tag mr-1 text-purple-400"></i>Foto Label</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-calendar mr-1 text-slate-400"></i>Tanggal &amp; Waktu</th>
+            <th class="py-2.5 px-3 text-right">Aksi</th>
+        </tr>
+    `;
+}
+
+function buildOdpGroupedRow(odpName, items, canEdit) {
+    const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const matchType = (item, ...types) => {
+        const ptype = (item.photoType || '').toUpperCase();
+        const dname = (item.deviceLabel || item.name || '').toUpperCase();
+        return types.some(t => ptype.includes(norm(t)) || dname.includes(norm(t)));
+    };
+
+    const findPhoto = (...types) => items.find(it => matchType(it, ...types)) || null;
+
+    const photoLuar  = findPhoto('TAMPAK LUAR', 'LUAR', 'DEPAN', 'OUTDOOR');
+    const photoDalam = findPhoto('TAMPAK DALAM', 'DALAM', 'INDOOR', 'BAKI', 'SPLITTER', 'TRAY');
+    const photoRed   = findPhoto('REDAMAN', 'OPM', 'LOSS', 'DBM');
+    const photoLabel = findPhoto('LABEL', 'STIKER', 'STICKER', 'PLANG');
+
+    const locItem = items.find(it => it.locationUrl) || null;
+    const locationUrl = locItem ? locItem.locationUrl : null;
+
+    // Cari nama ODC induk dari item
+    const odcInduk = (() => {
+        for (const it of items) {
+            const ref = it.odcReference || it.odc_reference || '';
+            if (ref) return ref;
+            const cat = it.category || '';
+            if (cat.toUpperCase().startsWith('ODC')) return cat;
+        }
+        return '-';
+    })();
+
+    const newest = items.reduce((a, b) => ((a.id || 0) > (b.id || 0) ? a : b), items[0] || {});
+
+    const photoBtn = (item, label, colorClass, iconClass) => item
+        ? `<button onclick="previewFile(${item.id})"
+                class="inline-flex flex-col items-center justify-center gap-0.5 w-full px-1.5 py-1.5 ${colorClass} rounded-lg font-semibold text-[10px] transition shadow-xs whitespace-nowrap cursor-pointer border"
+                title="Lihat ${label} (${item.size || '-'})">
+                <i class="fa-solid ${iconClass} text-[11px]"></i>
+                <span class="text-[9px] leading-tight">View</span>
+           </button>`
+        : `<div class="inline-flex flex-col items-center justify-center gap-0.5 w-full px-1.5 py-1.5 bg-slate-50 text-slate-300 border border-slate-200/60 rounded-lg text-[9px] opacity-60 cursor-not-allowed" title="${label} belum diupload">
+                <i class="fa-solid ${iconClass} text-[10px]"></i>
+                <span>-</span>
+           </div>`;
+
+    const luarBtn   = photoBtn(photoLuar,  'Tampak Luar',  'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200',     'fa-door-open');
+    const dalamBtn  = photoBtn(photoDalam, 'Tampak Dalam', 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200', 'fa-boxes-stacked');
+    const redBtn    = photoBtn(photoRed,   'Foto Redaman', 'bg-orange-50 hover:bg-orange-100 text-orange-800 border-orange-200', 'fa-gauge-high');
+    const labelBtn  = photoBtn(photoLabel, 'Foto Label',   'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200', 'fa-tag');
+
+    const locCell = locationUrl
+        ? `<a href="${escapeHtml(locationUrl)}" target="_blank"
+              class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold transition shadow-xs w-full"
+              title="Buka Titik Lokasi GPS ODP">
+              <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
+              <span class="text-[9px]">Maps</span>
+           </a>`
+        : `<div class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-slate-50 text-slate-300 border border-slate-200/60 rounded-lg text-[9px] opacity-60 cursor-not-allowed w-full" title="GPS belum dibagikan">
+              <i class="fa-solid fa-location-dot text-[10px]"></i>
+              <span>-</span>
+           </div>`;
+
+    const isOwner = checkIsOwner();
+    const allIds = items.map(it => it.id).filter(Boolean);
+    const deleteGroupBtn = isOwner && allIds.length > 0
+        ? `<button onclick="deleteOdpGroup('${escapeHtml(odpName)}', [${allIds.join(',')}])"
+                class="inline-flex items-center gap-1 px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-semibold transition shadow-xs"
+                title="Hapus Semua Evident ODP ${escapeHtml(odpName)} (Owner)">
+                <i class="fa-solid fa-trash-can text-[9px]"></i>
+                <span>Hapus</span>
+           </button>`
+        : '';
+
+    const photoCount = items.length;
+
+    const tr = document.createElement('tr');
+    tr.className = 'bg-green-50/40 hover:bg-green-50 border-b border-green-100 transition';
+    tr.innerHTML = `
+        <td class="py-2.5 px-3">
+            <div class="flex flex-col gap-0.5">
+                <span class="inline-flex items-center gap-1.5 font-bold text-green-800 text-[11px]">
+                    <i class="fa-solid fa-folder-closed text-green-500 text-[10px]"></i>
+                    ${escapeHtml(odpName)}
+                </span>
+                <span class="text-[9.5px] text-slate-400">${photoCount} foto evident</span>
+            </div>
+        </td>
+        <td class="py-2.5 px-3">
+            <span class="inline-flex items-center gap-1 text-blue-700 font-semibold text-[10px]">
+                <i class="fa-solid fa-network-wired text-blue-400 text-[9px]"></i>
+                ${escapeHtml(odcInduk)}
+            </span>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${locCell}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${luarBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${dalamBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${redBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[52px] mx-auto">${labelBtn}</div>
+        </td>
+        <td class="py-2.5 px-3 font-medium text-slate-700 text-[10.5px]">${escapeHtml(newest.uploader || '-')}</td>
+        <td class="py-2.5 px-3 text-slate-400 text-[10.5px]">${escapeHtml(newest.date || '-')}</td>
+        <td class="py-2.5 px-3 text-right whitespace-nowrap">${deleteGroupBtn}</td>
+    `;
+    return tr;
+}
+
+// Helper: Hapus semua evident dalam satu grup ODP (Owner only)
+async function deleteOdpGroup(odpName, ids) {
+    if (!checkIsOwner()) return alert('Akses Ditolak: Hanya Owner yang dapat menghapus.');
+    if (!confirm(`PERINGATAN OWNER:\nHapus semua ${ids.length} foto evident untuk ${odpName}?\n\nAksi ini tidak dapat dibatalkan.`)) return;
+
+    let failed = 0;
+    for (const id of ids) {
+        try {
+            const item = sampleData.find(d => d.id === id);
+            if (item && item.fileUrl) {
+                const fileName = item.fileUrl.split('/').pop().split('?')[0];
+                try { await supabaseClient.storage.from('evidents').remove([`uploads/${decodeURIComponent(fileName)}`]); } catch (e) {}
+            }
+            const { error } = await supabaseClient.from('evidents').delete().eq('id', id);
+            if (error) failed++;
+            else sampleData = sampleData.filter(d => d.id !== id);
+        } catch (e) { failed++; }
+    }
+
+    renderCategoryUI();
+    filterFiles();
+    if (failed > 0) alert(`Selesai. ${ids.length - failed} berhasil dihapus, ${failed} gagal.`);
+    else alert(`Semua evident ODP "${odpName}" berhasil dihapus.`);
 }
 
 // =====================================================================
@@ -1849,6 +2055,64 @@ function renderTable(data, isSearchMode = false) {
     tbody.innerHTML = '';
 
     const canEdit = currentUserRole === 'owner' || currentUserRole === 'editor';
+
+    // ===== MODE KHUSUS: Folder ODP → Tampilkan tabel grouped per unit ODP =====
+    if (currentCategory === 'ODP' && !isSearchMode) {
+        setOdpTableHeader();
+
+        // Ambil ODC filter dari dropdown (jika ada)
+        const odcDropdownEl = document.getElementById('odcSearchDropdown');
+        const selectedOdcFilter = odcDropdownEl ? odcDropdownEl.value : 'all';
+
+        const odpData = data && data.length > 0 ? data : sampleData.filter(item => {
+            const cat = (item.category || '').toUpperCase();
+            const lbl = (item.deviceLabel || '').toUpperCase();
+            return cat === 'ODP' || lbl.startsWith('ODP');
+        });
+
+        // Filter berdasarkan ODC yang dipilih di dropdown
+        let filteredOdpData = odpData;
+        if (selectedOdcFilter && selectedOdcFilter !== 'all') {
+            const selNorm = selectedOdcFilter.trim().toUpperCase();
+            filteredOdpData = odpData.filter(item => {
+                const ref = (item.odcReference || item.odc_reference || item.category || '').toUpperCase();
+                return ref.includes(selNorm) || selNorm.includes(ref.replace(/^ODC[-\s]*/,''));
+            });
+        }
+
+        if (!filteredOdpData || filteredOdpData.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="py-10 text-center text-slate-400">
+                        <i class="fa-solid fa-folder-open text-2xl text-slate-300 mb-1.5 block"></i>
+                        <p class="font-medium text-xs">Belum ada berkas evident ODP yang tersimpan.</p>
+                    </td>
+                </tr>
+            `;
+            updateStats();
+            return;
+        }
+
+        // Grup berdasarkan nama unit ODP
+        const odpGroups = {};
+        filteredOdpData.forEach(item => {
+            const odpName = (item.odpName || extractOdpName(item) || (item.deviceLabel || '').replace(/\s*\[.*\]$/,'').trim() || 'ODP Tidak Diketahui');
+            const key = odpName.trim().toUpperCase();
+            if (!odpGroups[key]) odpGroups[key] = { name: odpName, items: [] };
+            odpGroups[key].items.push(item);
+        });
+
+        // Urutkan nama ODP secara natural
+        const sortedOdpNames = Object.keys(odpGroups).sort((a, b) =>
+            odpGroups[a].name.localeCompare(odpGroups[b].name, undefined, { numeric: true, sensitivity: 'base' })
+        );
+        sortedOdpNames.forEach(key => {
+            tbody.appendChild(buildOdpGroupedRow(odpGroups[key].name, odpGroups[key].items, canEdit));
+        });
+
+        updateStats();
+        return;
+    }
 
     // ===== MODE KHUSUS: Folder ODC → Tampilkan tabel grouped per unit ODC =====
     if (currentCategory === 'ODC' && !isSearchMode && currentOdpFilter === 'all') {
