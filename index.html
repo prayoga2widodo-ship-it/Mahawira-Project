@@ -1,0 +1,622 @@
+
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Dashboard Pengumpulan Data Evident - Google Drive Style</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Supabase JS Client SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="style.css">
+    <script>
+        // Deteksi apakah pemuatan halaman ini adalah REFRESH halaman (bukan tab baru dibuka setelah ditutup)
+        (function () {
+            try {
+                var isSession = sessionStorage.getItem("evident_logged_in") === "true";
+                var nav = performance.getEntriesByType && performance.getEntriesByType("navigation");
+                var isNavReload = nav && nav.length > 0 && nav[0].type === "reload";
+                var isLegacyReload = window.performance && window.performance.navigation && window.performance.navigation.type === 1;
+                var lastUnload = parseInt(localStorage.getItem("evident_refresh_timestamp") || "0", 10);
+                var isRecentReload = (Date.now() - lastUnload) < 10000;
+                var hasPersisted = !!localStorage.getItem("evident_persisted_email");
+
+                if (isSession || ((isNavReload || isLegacyReload || isRecentReload) && hasPersisted)) {
+                    document.write('<style id="authShieldStyle">#authLockScreen { display: none !important; }</style>');
+                }
+            } catch (e) { }
+        })();
+    </script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Screen 1: Unauthenticated / Access Control Lock Screen -->
+    <div id="authLockScreen"
+        class="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl text-center space-y-6">
+            <div
+                class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-2xl mx-auto shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-bold text-slate-900" id="lockTitle">Akses Terbatas EvidentVault</h2>
+                <p class="text-xs text-slate-500 mt-2" id="lockSubtitle">Dashboard ini dilindungi izin akses dari
+                    Pemilik Utama (<span class="font-semibold text-blue-600"
+                        id="ownerDisplayEmail">mahawira2nusantara@gmail.com</span>).</p>
+            </div>
+
+            <!-- Login / Status State Container -->
+            <div id="authBox" class="space-y-4 pt-2">
+                <div class="text-left space-y-1">
+                    <label class="block text-[11px] font-semibold text-slate-600">Alamat Email Gmail:</label>
+                    <div class="relative">
+                        <span
+                            class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
+                            <i class="fa-solid fa-envelope"></i>
+                        </span>
+                        <input type="email" id="loginEmailInput" value="mahawira2nusantara@gmail.com"
+                            placeholder="nama@gmail.com"
+                            class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                            onkeydown="if(event.key === 'Enter') submitLoginForm()">
+                    </div>
+                </div>
+
+                <button onclick="submitLoginForm()"
+                    class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2.5 transition shadow-md">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-4 h-4"
+                        alt="Google Logo">
+                    <span>Masuk ke Dashboard</span>
+                </button>
+
+                <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                    <button onclick="quickLoginOwner()"
+                        class="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-crown text-[10px]"></i> Masuk sbg Pemilik
+                    </button>
+                    <button onclick="handleGoogleSignIn()"
+                        class="text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                        <i class="fa-solid fa-keyboard text-[10px]"></i> Dialog Input
+                    </button>
+                </div>
+                <p class="text-[11px] text-slate-400">Login otomatis dipertahankan saat refresh halaman. Login ulang
+                    hanya diperlukan saat tab/browser ditutup.</p>
+            </div>
+
+            <div id="accessDeniedBox" class="hidden space-y-4 pt-2">
+                <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 text-left">
+                    <p class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-circle-xmark"></i> Akses Belum
+                        Diizinkan!</p>
+                    <p class="mt-1 text-[11px]">Akun <span class="font-semibold" id="deniedUserEmail"></span> belum
+                        memiliki izin dari Pemilik. Silakan minta akses ke Pemilik Utama.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="requestAccess()"
+                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-3 rounded-lg text-xs transition">Minta
+                        Izin Akses</button>
+                    <button onclick="handleSignOut()"
+                        class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2.5 px-3 rounded-lg text-xs transition">Keluar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard UI -->
+    <header class="sticky top-0 z-30 glass-header border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo & Brand -->
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                        <i class="fa-solid fa-folder-closed text-lg"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-lg font-bold text-slate-900 leading-tight" id="dashboardTitle">EvidentVault
+                            </h1>
+                            <button onclick="openModal('titleModal')"
+                                class="role-editor text-slate-400 hover:text-blue-600 transition text-xs p-1"
+                                title="Ubah Nama Dashboard">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-500 font-medium" id="dashboardSubtitle">Dashboard Pengumpulan Data
+                            Evident</p>
+                    </div>
+                </div>
+
+                <!-- Global Actions & Profile -->
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                        <div class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold"
+                            id="userAvatar">M</div>
+                        <div class="text-left hidden sm:block">
+                            <p class="text-[11px] font-bold text-slate-800 leading-none" id="currentEmailDisplay">-</p>
+                            <span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded"
+                                id="userRoleBadge">-</span>
+                        </div>
+                        <button onclick="handleSignOut()" class="ml-1 text-slate-400 hover:text-rose-600 text-xs p-1"
+                            title="Keluar Akun">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+
+                    <button id="shareBtn" onclick="openModal('shareModal')"
+                        class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition shadow-sm shadow-emerald-600/20">
+                        <i class="fa-solid fa-user-plus text-xs"></i>
+                        <span class="hidden sm:inline">Bagikan Akses</span>
+                    </button>
+
+                    <button onclick="openModal('categoryModal')"
+                        class="role-editor bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition border border-slate-200">
+                        <i class="fa-solid fa-tags text-xs text-slate-500"></i>
+                        <span class="hidden lg:inline">Kelola Kategori</span>
+                    </button>
+
+                    <button onclick="openModal('uploadModal')"
+                        class="role-editor bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition shadow-sm shadow-blue-600/30">
+                        <i class="fa-solid fa-plus text-xs"></i>
+                        <span>Unggah Evident</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+        <!-- Stat Cards (Ringkasan Berkas Evident) -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total File Evident</p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" id="statTotal">0</p>
+                </div>
+                <div class="w-12 h-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xl"><i
+                        class="fa-solid fa-file-lines"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-cyan-600">Modem Pelanggan</p>
+                    <p class="text-2xl font-bold text-cyan-700 mt-1" id="statModem">0</p>
+                </div>
+                <div class="w-12 h-12 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center text-xl"><i
+                        class="fa-solid fa-house-signal"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Perangkat ODC</p>
+                    <p class="text-2xl font-bold text-indigo-700 mt-1" id="statOdc">0</p>
+                </div>
+                <div class="w-12 h-12 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-server"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Perangkat ODP</p>
+                    <p class="text-2xl font-bold text-emerald-700 mt-1" id="statOdp">0</p>
+                </div>
+                <div
+                    class="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-network-wired"></i></div>
+            </div>
+        </section>
+
+        <!-- Quick Upload Drop Zone -->
+        <section
+            class="role-editor bg-white rounded-xl border border-dashed border-slate-300 p-6 text-center hover:border-blue-400 transition cursor-pointer relative"
+            id="dropZone" onclick="openModal('uploadModal')">
+            <div class="max-w-md mx-auto space-y-2">
+                <div
+                    class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto text-xl mb-3">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <h3 class="text-sm font-semibold text-slate-800">Seret dan lepas file evident Anda di sini</h3>
+                <p class="text-xs text-slate-500">Mendukung format PDF, PNG, JPG, XLSX, DOCX hingga banyak file
+                    sekaligus</p>
+            </div>
+        </section>
+
+        <!-- Google Drive Style Folder Navigation (Penamaan ODC & Kategori) -->
+        <section class="space-y-3" id="folderSection">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div class="flex items-center gap-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                        <i class="fa-solid fa-folder text-blue-600"></i> Folder Perangkat ODC & Kategori Evident
+                    </h3>
+                    <span class="text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full"
+                        id="folderCountBadge">0 Folder</span>
+                </div>
+                <!-- Search & Filter Cepat untuk Kategori Tertentu -->
+                <div class="relative w-full sm:w-72">
+                    <i class="fa-solid fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" id="categoryFolderSearch" oninput="filterFolderGrid()"
+                        placeholder="Cari kategori / ODC... (mis: SKD 01, TIANG)"
+                        class="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
+                    <button id="clearCatSearchBtn" onclick="clearCatFolderSearch()"
+                        class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+                        title="Hapus filter kategori">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="folderGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5"></div>
+        </section>
+
+        <!-- File Table Container & Pencarian Khusus Pelanggan / SN -->
+        <section class="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <!-- Search & Filter Controls -->
+            <div class="p-3 sm:p-4 border-b border-slate-100 space-y-2.5">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-magnifying-glass text-blue-600"></i> Pencarian Evident:
+                        </span>
+                    </div>
+
+                    <!-- Search Input Bar & Dropdown Target Kolom -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 max-w-2xl">
+                        <select id="searchFieldSelect" onchange="filterFiles()"
+                            class="bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer">
+                            <option value="all">🔍 Semua Kolom</option>
+                            <option value="customerName">👤 Nama Pelanggan</option>
+                            <option value="customerId">🆔 ID Pelanggan</option>
+                            <option value="modemSn">📟 SN Modem</option>
+                            <option value="odpName">🛜 Nama ODP</option>
+                            <option value="fileOrLabel">📁 File & Label</option>
+                        </select>
+
+                        <div class="relative flex-1">
+                            <i
+                                class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" id="searchInput" oninput="filterFiles()"
+                                placeholder="Cari Nama Pelanggan, ID, SN Modem, ODP, Label..."
+                                class="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
+                            <button id="clearSearchBtn" onclick="clearSearch()"
+                                class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+                                title="Hapus pencarian">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Filter Category Pills -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100"
+                    id="categoryFilterContainer"></div>
+            </div>
+
+            <!-- ODP Dropdown Selector & Panel Pelanggan per ODP (Dinamis saat Kategori ODC Dipilih) -->
+            <div id="odpFilterSection"
+                class="hidden px-4 py-3 bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-blue-50/60 border-b border-indigo-100 space-y-2.5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-diagram-project text-indigo-600 text-xs"></i> Pilihan ODP:
+                        </span>
+                        <div class="relative">
+                            <select id="odpDropdownSelect" onchange="handleOdpDropdownChange(this.value)"
+                                class="bg-white text-indigo-900 text-xs font-bold rounded-lg pl-3 pr-8 py-1.5 border border-indigo-200 shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer">
+                                <option value="all">📂 Semua ODP Terdaftar</option>
+                            </select>
+                        </div>
+                        <span id="odpActiveBadge"
+                            class="text-[10.5px] font-semibold text-indigo-700 bg-white/90 border border-indigo-200 px-2.5 py-0.5 rounded-md shadow-2xs">
+                            Menampilkan semua data ODP
+                        </span>
+                    </div>
+                    <button id="btnResetOdpFilter" onclick="resetOdpDropdownFilter()"
+                        class="hidden text-[11px] font-bold text-indigo-700 hover:text-indigo-900 underline flex items-center gap-1">
+                        <i class="fa-solid fa-rotate-left text-[10px]"></i> Tampilkan Semua ODP
+                    </button>
+                </div>
+
+                <!-- Panel Ringkasan List Pelanggan di ODP Terpilih -->
+                <div id="odpClientListCard"
+                    class="hidden bg-white rounded-lg border border-indigo-100 p-3 shadow-2xs space-y-2">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-md bg-indigo-600 text-white flex items-center justify-center text-[11px]">
+                                <i class="fa-solid fa-users"></i>
+                            </span>
+                            <h4 class="text-xs font-bold text-slate-800" id="odpClientCardTitle">Daftar Pelanggan di ODP</h4>
+                        </div>
+                        <span class="text-[10.5px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200"
+                            id="odpClientCountBadge">0 Pelanggan</span>
+                    </div>
+                    <div id="odpClientChipsList"
+                        class="flex flex-wrap gap-2 pt-1 max-h-48 overflow-y-auto custom-scrollbar"></div>
+                </div>
+            </div>
+
+            <!-- Banner Notifikasi Hasil Pencarian -->
+            <div id="searchNoticeBanner"
+                class="hidden px-4 py-2 bg-blue-50/80 border-b border-blue-100 flex items-center justify-between text-xs text-blue-900 font-medium">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-magnifying-glass text-blue-600 text-xs"></i>
+                    <span id="searchNoticeText">Menampilkan hasil pencarian...</span>
+                </div>
+                <button onclick="clearSearch()"
+                    class="text-blue-700 hover:text-blue-900 font-bold underline text-[11px] inline-flex items-center gap-1">
+                    <i class="fa-solid fa-rotate-left text-[10px]"></i> Reset Pencarian
+                </button>
+            </div>
+
+            <div id="listView" class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr
+                            class="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[10.5px] font-bold uppercase tracking-wider">
+                            <th class="py-2.5 px-3">File Evident</th>
+                            <th class="py-2.5 px-3">ID Pelanggan</th>
+                            <th class="py-2.5 px-3">Nama Pelanggan</th>
+                            <th class="py-2.5 px-3">SN Modem</th>
+                            <th class="py-2.5 px-3">Nama ODP</th>
+                            <th class="py-2.5 px-3">Kategori</th>
+                            <th class="py-2.5 px-3">Pengunggah</th>
+                            <th class="py-2.5 px-3">Tanggal & Waktu</th>
+                            <th class="py-2.5 px-3 text-right">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileTableBody" class="divide-y divide-slate-100 text-[11px] text-slate-700"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal Share Access -->
+    <div id="shareModal"
+        class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-user-gear text-emerald-600"></i>
+                    <h3 class="text-base font-bold text-slate-900">Pengaturan Izin Akses Email</h3>
+                </div>
+                <button onclick="closeModal('shareModal')" class="text-slate-400 hover:text-slate-600 p-1"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-3">
+                <label class="block text-xs font-semibold text-slate-700">Tambah Gmail & Atur Akses</label>
+                <div class="flex gap-2">
+                    <input type="email" id="grantEmailInput" placeholder="Contoh: rekan@gmail.com"
+                        class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500/20 focus:outline-none">
+                    <select id="grantRoleSelect"
+                        class="px-3 py-2 border border-slate-200 rounded-lg text-xs bg-slate-50 font-semibold">
+                        <option value="viewer">Viewer (Lihat & Download)</option>
+                        <option value="editor">Editor (Upload & Edit)</option>
+                    </select>
+                    <button onclick="grantAccess()"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition">Tambah</button>
+                </div>
+            </div>
+
+            <div class="space-y-2 pt-2">
+                <h4 class="text-xs font-bold text-slate-700">Daftar Email yang Memiliki Akses:</h4>
+                <div id="allowedEmailList" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar"></div>
+            </div>
+
+            <!-- Pendaftaran ID Telegram (Bisa Hingga 100 ID Sekaligus) -->
+            <div class="space-y-2 pt-3 border-t border-slate-100">
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <i class="fa-brands fa-telegram text-blue-500"></i> Pendaftaran ID Telegram (Bisa 100 ID Sekaligus)
+                    </label>
+                    <span class="text-[10px] text-slate-400">1 baris per ID</span>
+                </div>
+                <textarea id="bulkTelegramInput" rows="3"
+                    placeholder="Contoh format:&#10;119509416 - Owner Utama&#10;123456789 - Budi&#10;Atau deretan ID: 111111, 222222, 333333"
+                    class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"></textarea>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-slate-400">ID otomatis aktif dengan role Editor upload evident.</span>
+                    <button onclick="submitBulkTelegramFromDashboard()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs">
+                        <i class="fa-solid fa-user-plus text-[10px]"></i> Daftarkan Semua ID
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-2 border-t border-slate-100">
+                <button type="button" onclick="closeModal('shareModal')"
+                    class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold">Selesai</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Kelola Kategori -->
+    <div id="categoryModal"
+        class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-900">Kelola Kategori Evident</h3>
+                <button onclick="closeModal('categoryModal')" class="text-slate-400 hover:text-slate-600 p-1"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="flex gap-2">
+                <input type="text" id="newCategoryInput" placeholder="Nama kategori baru..."
+                    class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:outline-none">
+                <button onclick="addNewCategory()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition">
+                    <i class="fa-solid fa-plus"></i> Tambah
+                </button>
+            </div>
+
+            <div class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pt-2" id="categoryManageList"></div>
+
+            <div class="flex justify-end pt-2">
+                <button type="button" onclick="closeModal('categoryModal')"
+                    class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ubah Title -->
+    <div id="titleModal"
+        class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-900">Ubah Nama Dashboard</h3>
+                <button onclick="closeModal('titleModal')" class="text-slate-400 hover:text-slate-600 p-1"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="saveTitle(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Dashboard (Utama)</label>
+                    <input type="text" id="titleInput" required
+                        class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Sub-Judul</label>
+                    <input type="text" id="subtitleInput" required
+                        class="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('titleModal')"
+                        class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold">Batal</button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">Simpan
+                        Perubahan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Preview File -->
+    <div id="previewModal"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-4 flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="min-w-0 flex-1 pr-4">
+                    <h3 class="text-base font-bold text-slate-900 truncate" id="previewFileName">Pratinjau Evident</h3>
+                    <div id="previewModemBadges" class="flex flex-wrap gap-2 mt-2"></div>
+                </div>
+                <button onclick="closeModal('previewModal')" class="text-slate-400 hover:text-slate-600 p-1"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="previewBody"
+                class="flex-1 overflow-auto bg-slate-900/5 rounded-xl p-2 flex items-center justify-center min-h-[350px]">
+            </div>
+            <div class="flex items-center justify-between border-t border-slate-100 pt-3">
+                <div class="text-xs text-slate-500"><span id="previewInfo">-</span></div>
+                <div class="flex items-center gap-2">
+                    <button id="deleteFromPreviewBtn" onclick="deleteCurrentPreviewEvident()"
+                        class="hidden px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                        title="Hapus Evident Permanen (Owner)">
+                        <i class="fa-solid fa-trash-can text-xs text-rose-600"></i>
+                        <span>Hapus Evident</span>
+                    </button>
+                    <button onclick="closeModal('previewModal')"
+                        class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-200 transition">Tutup</button>
+                    <a id="downloadFromPreviewBtn" download
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 hover:bg-blue-700 transition"><i
+                            class="fa-solid fa-download"></i> Unduh File</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal History Log Aktivitas Pelanggan -->
+    <div id="customerHistoryModal"
+        class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <!-- Header Modal -->
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-md shadow-indigo-500/20">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                            <span>History Log Aktivitas Pelanggan</span>
+                            <span id="custHistBadge" class="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200">-</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5" id="custHistSubtitle">Riwayat pengumpulan evident dan status modem pelanggan</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('customerHistoryModal')" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Card Profil Singkat Pelanggan -->
+            <div id="custHistProfileCard" class="p-3 bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-slate-50 rounded-xl border border-indigo-100/80 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div>
+                    <span class="text-[10px] font-semibold text-slate-400 block uppercase">Nama Pelanggan</span>
+                    <span class="font-bold text-slate-800 truncate block text-[11px]" id="custHistName">-</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-semibold text-slate-400 block uppercase">ID Pelanggan</span>
+                    <span class="font-bold font-mono text-indigo-700 truncate block text-[11px]" id="custHistId">-</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-semibold text-slate-400 block uppercase">SN Modem</span>
+                    <span class="font-bold font-mono text-amber-800 truncate block text-[11px]" id="custHistSn">-</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-semibold text-slate-400 block uppercase">Lokasi / ODP</span>
+                    <span class="font-bold text-purple-700 truncate block text-[11px]" id="custHistOdp">-</span>
+                </div>
+            </div>
+
+            <!-- List Timeline Riwayat Evident Pelanggan -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1" id="custHistTimelineList"></div>
+
+            <!-- Footer Modal -->
+            <div class="flex items-center justify-between border-t border-slate-100 pt-3">
+                <span class="text-[11px] text-slate-400 font-medium" id="custHistTotalEvident">Total 0 aktivitas tercatat</span>
+                <button type="button" onclick="closeModal('customerHistoryModal')"
+                    class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">
+                    Tutup Riwayat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Upload -->
+    <div id="uploadModal"
+        class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 class="text-base font-bold text-slate-900">Unggah Data Evident Baru</h3>
+                <button onclick="closeModal('uploadModal')" class="text-slate-400 hover:text-slate-600 p-1"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="uploadForm" onsubmit="handleUpload(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Pilih File</label>
+                    <input type="file" multiple id="fileInput" required
+                        class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Kategori</label>
+                    <select id="categorySelect" class="w-full px-3 py-2 border rounded-lg text-xs"></select>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('uploadModal')"
+                        class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold">Batal</button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">Simpan
+                        Evident</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Application JavaScript Scripts (Cache-Busted to Ensure Instant Update) -->
+    <script src="config.js?v=20261112_05"></script>
+    <script src="script.js?v=20261112_05"></script>
+</body>
+
+</html>

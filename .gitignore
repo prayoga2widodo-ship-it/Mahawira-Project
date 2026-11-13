@@ -1,0 +1,18 @@
+# Node dependencies
+node_modules/
+package-lock.json
+
+# Local vault storage and evident backups (to prevent GitHub file size limits)
+data/evident_vault/
+data/*.jpg
+data/*.png
+
+# Logs and environment
+*.log
+.env
+.env.local
+
+# OS files
+Thumbs.db
+.DS_Store
+
