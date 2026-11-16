@@ -520,5 +520,41 @@
     "deviceLabel": "ODP-SKD 02/02 [LABEL]",
     "date": "13/11/2026, 13.28.11",
     "fileName": "evident_ODP-SKD_02_02_[LABEL]_[H:528e0a782e7d78d4][DH:f8f8f836369ef8f8]_1794551291269.jpg"
+  },
+  {
+    "sha256": "a331cc10b81aa19536d50b9db10a66af665d60c17c95fd1b741625bdd6d1eefa",
+    "dhash": "1cfca0b0b8922127",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 557/RTL/WNJ-007/001 | Nama: RULLY WIJAYA | SN: ZTEGC65199211 [TAMPAK DEPAN]",
+    "date": "16/11/2026, 08.30.39",
+    "fileName": "evident_modem_ODP-SKD_01_01_ID_557RTLWNJ-007001_SN_ZTEGC65199211_[DEPAN]_[H:a331cc10b81aa195][DH:1cfca0b0b8922127]_1794792639153.jpg"
+  },
+  {
+    "sha256": "166c90e00a179cd200485583315d4744e86d579346dd48609d065b83e29c0c45",
+    "dhash": "f95b5b1f2707070f",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 557/RTL/WNJ-007/001 | Nama: RULLY WIJAYA | SN: ZTEGC65199211 [TAMPAK BELAKANG]",
+    "date": "16/11/2026, 08.30.55",
+    "fileName": "evident_modem_ODP-SKD_01_01_ID_557RTLWNJ-007001_SN_ZTEGC65199211_[BELAKANG]_[H:166c90e00a179cd2][DH:f95b5b1f2707070f]_1794792654641.jpg"
+  },
+  {
+    "sha256": "02e3dff89cfb7ef6cc686f19324f57b801d36c1b42026e6221c3a9a03de12c2e",
+    "dhash": "9309a5734d4c6663",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 02",
+    "deviceLabel": "MODEM [ODP-SKD 02/02] - ID: 557/RTL/WNJ-007/001 | Nama: FEBRI HAIHAQ | SN: ZTEGC871921111 [TAMPAK DEPAN]",
+    "date": "16/11/2026, 08.32.26",
+    "fileName": "evident_modem_ODP-SKD_02_02_ID_557RTLWNJ-007001_SN_ZTEGC871921111_[DEPAN]_[H:02e3dff89cfb7ef6][DH:9309a5734d4c6663]_1794792746332.jpg"
+  },
+  {
+    "sha256": "18fbfb2fab87284e7fa1391210877681557100743cfbf6553dae129da74e91ed",
+    "dhash": "64767676d45450c4",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 02",
+    "deviceLabel": "MODEM [ODP-SKD 02/02] - ID: 557/RTL/WNJ-007/001 | Nama: FEBRI HAIHAQ | SN: ZTEGC871921111 [TAMPAK BELAKANG]",
+    "date": "16/11/2026, 08.32.36",
+    "fileName": "evident_modem_ODP-SKD_02_02_ID_557RTLWNJ-007001_SN_ZTEGC871921111_[BELAKANG]_[H:18fbfb2fab87284e][DH:64767676d45450c4]_1794792756128.jpg"
   }
 ]

@@ -222,8 +222,9 @@ function buildPhotoTypeMenu(category, label, completedTypes = [], hasLocation = 
 
     const rows = [];
     const catUp = (category || '').toUpperCase();
-    const isOdc = catUp.startsWith('ODC');
-    const isOdp = catUp === 'ODP';
+    const lblUp = (label || '').toUpperCase();
+    const isOdp = catUp === 'ODP' || lblUp.startsWith('ODP');
+    const isOdc = !isOdp && (catUp.startsWith('ODC') || lblUp.startsWith('ODC'));
 
     if (isOdc) {
         rows.push([
@@ -1212,6 +1213,23 @@ async function saveEvidentToDatabase(ctx, recordData) {
         });
     }
 
+    // Sinkronkan titik lokasi GPS ke seluruh evident terkait yang belum memiliki lokasi
+    if (recordData.latitude && recordData.longitude && recordData.baseLabel) {
+        try {
+            await supabase
+                .from('evidents')
+                .update({
+                    latitude: recordData.latitude,
+                    longitude: recordData.longitude,
+                    location_url: recordData.locationUrl
+                })
+                .ilike('device_label', `%${recordData.baseLabel}%`)
+                .is('location_url', null);
+        } catch (syncLocErr) {
+            console.warn("Sinkronisasi lokasi GPS ke evident terkait:", syncLocErr.message);
+        }
+    }
+
     let extraDetails = '';
     if (recordData.deviceLabel) extraDetails += `🏷 *Label Perangkat:* \`${recordData.deviceLabel}\`\n`;
     if (recordData.photoType) extraDetails += `📷 *Jenis Foto:* *${recordData.photoType}*\n`;
@@ -1247,7 +1265,10 @@ async function saveEvidentToDatabase(ctx, recordData) {
 
     let buttons;
     if (recordData.baseLabel) {
-        buttons = buildPhotoTypeMenu(recordData.category, recordData.baseLabel, recordData.completedTypes || []);
+        const isOdpRecord = (recordData.baseLabel || '').toUpperCase().startsWith('ODP') || Boolean(recordData.odpReference);
+        const menuCategory = isOdpRecord ? 'ODP' : recordData.category;
+        const hasLocation = Boolean(recordData.locationUrl || (recordData.latitude && recordData.longitude));
+        buttons = buildPhotoTypeMenu(menuCategory, recordData.baseLabel, recordData.completedTypes || [], hasLocation);
     } else {
         buttons = Markup.inlineKeyboard([
             [
@@ -1973,6 +1994,7 @@ bot.action('action_odp_shareloc', async (ctx) => {
         return ctx.reply("⚠️ Sesi telah berakhir atau label belum dimasukkan. Silakan pilih menu:", buildMainInlineMenu());
     }
 
+    session.category = 'ODP';
     session.step = 'waiting_location_odp';
 
     await ctx.reply(
@@ -2001,6 +2023,7 @@ bot.action('action_odc_shareloc', async (ctx) => {
         return ctx.reply("⚠️ Sesi telah berakhir atau label belum dimasukkan. Silakan pilih menu:", buildMainInlineMenu());
     }
 
+    session.category = 'ODC';
     session.step = 'waiting_location_odc';
 
     await ctx.reply(
@@ -2031,8 +2054,8 @@ bot.action(/action_type:(.+)/, async (ctx) => {
     }
 
     // SOP ODC & ODP: Wajib Share Loc sebelum upload Tampak Luar / Depan
-    const isOdcCat = (session.category || '').toUpperCase().startsWith('ODC');
-    const isOdpCat = (session.category || '').toUpperCase() === 'ODP';
+    const isOdpCat = (session.category || '').toUpperCase() === 'ODP' || (session.deviceLabel || '').toUpperCase().startsWith('ODP');
+    const isOdcCat = !isOdpCat && ((session.category || '').toUpperCase().startsWith('ODC') || (session.deviceLabel || '').toUpperCase().startsWith('ODC'));
 
     if (isOdcCat && type === 'TAMPAK LUAR' && !session.locationUrl && !session.latitude) {
         session.step = 'waiting_location_odc';
@@ -2115,11 +2138,13 @@ bot.action('action_back_types', async (ctx) => {
     }
     session.step = 'waiting_photo_type';
     session.photoType = null;
+    const isOdp = (session.category || '').toUpperCase() === 'ODP' || (session.deviceLabel || '').toUpperCase().startsWith('ODP');
+    const hasLocation = Boolean(session.locationUrl || (session.latitude && session.longitude));
     await ctx.reply(
         `📸 *Pilih jenis foto untuk ${session.deviceLabel}:*`,
         {
             parse_mode: 'Markdown',
-            ...buildPhotoTypeMenu(session.category || 'ODC', session.deviceLabel)
+            ...buildPhotoTypeMenu(isOdp ? 'ODP' : (session.category || 'ODC'), session.deviceLabel, session.completedTypes || [], hasLocation)
         }
     );
 });
@@ -2678,24 +2703,46 @@ bot.on('location', async (ctx) => {
     const session = getSession(chatId);
 
     // 1. Tangani Lokasi GPS untuk ODP (Share Loc sebelum Foto Tampak Luar/Depan)
-    const isOdpSession = (session.category || '').toUpperCase() === 'ODP' || session.step === 'waiting_location_odp';
-    if (isOdpSession && (session.step === 'waiting_location_odp' || !session.locationUrl)) {
+    const isOdpSession = (session.category || '').toUpperCase() === 'ODP' || 
+                         (session.deviceLabel || '').toUpperCase().startsWith('ODP') || 
+                         session.step === 'waiting_location_odp';
+
+    if (isOdpSession && (session.step === 'waiting_location_odp' || session.step === 'waiting_location' || !session.locationUrl || session.category === 'ODP')) {
         const loc = ctx.message.location;
         const lat = loc.latitude;
         const lng = loc.longitude;
         const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
 
+        session.category = 'ODP';
         session.latitude = lat;
         session.longitude = lng;
         session.locationUrl = mapsUrl;
         session.photoType = 'TAMPAK LUAR';
         session.step = 'waiting_photo';
 
+        // Segera sinkronkan titik lokasi GPS ke database Supabase untuk seluruh foto ODP ini
+        if (session.deviceLabel) {
+            const baseOdp = session.deviceLabel.replace(/\s*\[.*\]$/, '').trim();
+            try {
+                await supabase
+                    .from('evidents')
+                    .update({
+                        latitude: lat,
+                        longitude: lng,
+                        location_url: mapsUrl
+                    })
+                    .ilike('device_label', `%${baseOdp}%`);
+            } catch (updateErr) {
+                console.error("Gagal sinkron lokasi ODP ke Supabase:", updateErr);
+            }
+        }
+
         await ctx.reply(
             `✅ *LOKASI GPS ODP BERHASIL DITERIMA & DISIMPAN!*\n\n` +
             `🏷️ *Perangkat ODP:* \`${session.deviceLabel || 'ODP'}\`\n` +
             `📍 *Titik Koordinat:* \`${lat}, ${lng}\`\n` +
             `🗺️ *Google Maps:* [Buka Peta Lokasi](${mapsUrl})\n\n` +
+            `✨ *Titik lokasi GPS ini telah tersimpan di Web Dashboard!*\n\n` +
             `🚪 *SEKARANG, SILAKAN AMBIL / KIRIMKAN FOTO ODP TAMPAK LUAR (DEPAN):*\n` +
             `💡 *Tips:* Pastikan pintu ODP tertutup rapi dan fisik box ODP terlihat jelas dan utuh.`,
             {
@@ -2714,24 +2761,46 @@ bot.on('location', async (ctx) => {
     }
 
     // 2. Tangani Lokasi GPS untuk ODC (Share Loc sebelum Foto Tampak Luar/Depan)
-    const isOdcSession = (session.category || '').toUpperCase().startsWith('ODC');
+    const isOdcSession = (session.category || '').toUpperCase().startsWith('ODC') ||
+                         (session.deviceLabel || '').toUpperCase().startsWith('ODC') ||
+                         session.step === 'waiting_location_odc';
+
     if (isOdcSession && (session.step === 'waiting_location_odc' || session.step === 'waiting_location' || !session.locationUrl)) {
         const loc = ctx.message.location;
         const lat = loc.latitude;
         const lng = loc.longitude;
         const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
 
+        session.category = 'ODC';
         session.latitude = lat;
         session.longitude = lng;
         session.locationUrl = mapsUrl;
         session.photoType = 'TAMPAK LUAR';
         session.step = 'waiting_photo';
 
+        // Segera sinkronkan titik lokasi GPS ke database Supabase untuk seluruh foto ODC ini
+        if (session.deviceLabel) {
+            const baseOdc = session.deviceLabel.replace(/\s*\[.*\]$/, '').trim();
+            try {
+                await supabase
+                    .from('evidents')
+                    .update({
+                        latitude: lat,
+                        longitude: lng,
+                        location_url: mapsUrl
+                    })
+                    .ilike('device_label', `%${baseOdc}%`);
+            } catch (updateErr) {
+                console.error("Gagal sinkron lokasi ODC ke Supabase:", updateErr);
+            }
+        }
+
         await ctx.reply(
             `✅ *LOKASI GPS ODC BERHASIL DITERIMA & DISIMPAN!*\n\n` +
             `🏷 *Perangkat ODC:* \`${session.deviceLabel || 'ODC'}\`\n` +
             `📍 *Titik Koordinat:* \`${lat}, ${lng}\`\n` +
             `🗺 *Google Maps:* [Buka Peta Lokasi](${mapsUrl})\n\n` +
+            `✨ *Titik lokasi GPS ini telah tersimpan di Web Dashboard!*\n\n` +
             `🚪 *SEKARANG, SILAKAN AMBIL / KIRIMKAN FOTO ODC TAMPAK LUAR (DEPAN):*\n` +
             `💡 *Tips:* Pastikan pintu ODC tertutup rapi dan fisik box ODC terlihat jelas dan utuh.`,
             {

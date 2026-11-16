@@ -2010,16 +2010,26 @@ function buildOdpGroupedRow(odpName, items, canEdit) {
     const labelBtn  = photoBtn(photoLabel, 'Foto Label',   'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200', 'fa-tag');
 
     const locCell = locationUrl
-        ? `<a href="${escapeHtml(locationUrl)}" target="_blank"
-              class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold transition shadow-xs w-full"
-              title="Buka Titik Lokasi GPS ODP">
-              <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
-              <span class="text-[9px]">Maps</span>
-           </a>`
-        : `<div class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-slate-50 text-slate-300 border border-slate-200/60 rounded-lg text-[9px] opacity-60 cursor-not-allowed w-full" title="GPS belum dibagikan">
-              <i class="fa-solid fa-location-dot text-[10px]"></i>
-              <span>-</span>
-           </div>`;
+        ? `<div class="flex items-center justify-center gap-1 w-full mx-auto">
+              <a href="${escapeHtml(locationUrl)}" target="_blank"
+                 class="inline-flex flex-col items-center gap-0.5 px-1.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold transition shadow-xs w-full"
+                 title="Buka Titik Lokasi GPS ODP (${escapeHtml(odpName)})">
+                 <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
+                 <span class="text-[9px]">Maps</span>
+              </a>
+              ${canEdit ? `
+              <button onclick="setOdpLocation('${escapeHtml(odpName)}', '${escapeHtml(locationUrl)}')"
+                 class="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-100 rounded text-[9px] transition"
+                 title="Ubah Titik Lokasi GPS ODP">
+                 <i class="fa-solid fa-pen"></i>
+              </button>` : ''}
+           </div>`
+        : `<button onclick="${canEdit ? `setOdpLocation('${escapeHtml(odpName)}')` : `alert('Lokasi GPS untuk ODP ini belum dibagikan.')`}"
+              class="inline-flex flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 ${canEdit ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer shadow-xs' : 'bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed opacity-75'} rounded-lg text-[9px] font-semibold w-full"
+              title="${canEdit ? 'Klik untuk Atur Titik Lokasi GPS ODP' : 'GPS belum dibagikan'}">
+              <i class="fa-solid ${canEdit ? 'fa-location-crosshairs text-amber-600' : 'fa-location-dot text-slate-300'} text-[11px]"></i>
+              <span>${canEdit ? '+ Loc' : '-'}</span>
+           </button>`;
 
     const isOwner = checkIsOwner();
     const allIds = items.map(it => it.id).filter(Boolean);
@@ -2053,7 +2063,7 @@ function buildOdpGroupedRow(odpName, items, canEdit) {
             </span>
         </td>
         <td class="py-2.5 px-3 text-center">
-            <div class="flex justify-center w-full max-w-[52px] mx-auto">${locCell}</div>
+            <div class="flex justify-center w-full max-w-[65px] mx-auto">${locCell}</div>
         </td>
         <td class="py-2.5 px-3 text-center">
             <div class="flex justify-center w-full max-w-[52px] mx-auto">${luarBtn}</div>
@@ -2097,6 +2107,83 @@ async function deleteOdpGroup(odpName, ids) {
     filterFiles();
     if (failed > 0) alert(`Selesai. ${ids.length - failed} berhasil dihapus, ${failed} gagal.`);
     else alert(`Semua evident ODP "${odpName}" berhasil dihapus.`);
+}
+
+// Helper: Atur atau Ubah Titik Lokasi GPS ODP langsung dari Dashboard
+async function setOdpLocation(odpName, existingUrl = '') {
+    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') {
+        return alert('Akses ditolak: Hanya Owner dan Editor yang dapat mengatur lokasi.');
+    }
+    const currentVal = existingUrl && existingUrl !== 'null' ? existingUrl : '';
+    const promptMsg = currentVal
+        ? `Ubah Titik Lokasi GPS / Google Maps untuk ODP "${odpName}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`
+        : `Atur Titik Lokasi GPS / Google Maps untuk ODP "${odpName}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`;
+
+    const input = prompt(promptMsg, currentVal);
+    if (input === null) return;
+    const trimmed = input.trim();
+    if (!trimmed && currentVal) {
+        if (!confirm(`Hapus titik lokasi GPS untuk ODP "${odpName}"?`)) return;
+    }
+
+    let finalUrl = trimmed;
+    let lat = null;
+    let lng = null;
+
+    if (trimmed) {
+        const mCoord = trimmed.match(/^([-+]?[0-9]*\.?[0-9]+)[\s,]+([-+]?[0-9]*\.?[0-9]+)$/);
+        if (mCoord) {
+            lat = parseFloat(mCoord[1]);
+            lng = parseFloat(mCoord[2]);
+            finalUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        } else if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+            finalUrl = `https://${trimmed}`;
+        }
+    } else {
+        finalUrl = null;
+    }
+
+    const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const targetNorm = norm(odpName);
+    const targetIds = [];
+
+    sampleData.forEach(item => {
+        const itemOdp = (item.odpName || extractOdpName(item) || item.deviceLabel || '').toUpperCase();
+        if (norm(itemOdp).includes(targetNorm) || targetNorm.includes(norm(itemOdp))) {
+            item.locationUrl = finalUrl;
+            if (lat && lng) {
+                item.latitude = lat;
+                item.longitude = lng;
+            } else if (!finalUrl) {
+                item.latitude = null;
+                item.longitude = null;
+            }
+            if (item.id) targetIds.push(item.id);
+        }
+    });
+
+    try {
+        const payload = { location_url: finalUrl };
+        if (lat && lng) {
+            payload.latitude = lat;
+            payload.longitude = lng;
+        } else if (!finalUrl) {
+            payload.latitude = null;
+            payload.longitude = null;
+        }
+
+        if (targetIds.length > 0) {
+            await supabaseClient.from('evidents').update(payload).in('id', targetIds);
+        }
+        await supabaseClient.from('evidents').update(payload).ilike('device_label', `%${odpName}%`);
+
+        alert(`Titik lokasi GPS untuk ODP "${odpName}" berhasil disimpan!`);
+    } catch (e) {
+        console.error("Gagal update lokasi ODP ke Supabase:", e);
+        alert("Gagal simpan ke database: " + (e.message || e));
+    }
+
+    filterFiles();
 }
 
 // =====================================================================
@@ -2156,9 +2243,8 @@ function buildOdcGroupedRow(odcName, items, canEdit) {
     const photoRed   = findPhoto('REDAMAN', 'OPM', 'LOSS', 'DBM');
     const photoLabel = findPhoto('LABEL', 'STIKER', 'STICKER', 'PLANG');
 
-    // Share Loc: ambil dari item manapun yang punya locationUrl
-    const locItem = items.find(it => it.locationUrl) || null;
-    const locationUrl = locItem ? locItem.locationUrl : null;
+    const locItem = items.find(it => it.locationUrl) || items.find(it => it.latitude && it.longitude) || null;
+    const locationUrl = locItem ? (locItem.locationUrl || `https://www.google.com/maps?q=${locItem.latitude},${locItem.longitude}`) : null;
 
     // Pengunggah & Tanggal: dari item terbaru
     const newest = items.reduce((a, b) => ((a.id || 0) > (b.id || 0) ? a : b), items[0] || {});
@@ -2182,16 +2268,26 @@ function buildOdcGroupedRow(odcName, items, canEdit) {
     const labelBtn  = photoBtn(photoLabel, 'Foto Label',   'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200', 'fa-tag');
 
     const locCell = locationUrl
-        ? `<a href="${escapeHtml(locationUrl)}" target="_blank"
-              class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold transition shadow-xs w-full"
-              title="Buka Titik Lokasi GPS">
-              <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
-              <span class="text-[9px]">Maps</span>
-           </a>`
-        : `<div class="inline-flex flex-col items-center gap-0.5 px-2 py-1.5 bg-slate-50 text-slate-300 border border-slate-200/60 rounded-lg text-[9px] opacity-60 cursor-not-allowed w-full" title="GPS belum dibagikan">
-              <i class="fa-solid fa-location-dot text-[10px]"></i>
-              <span>-</span>
-           </div>`;
+        ? `<div class="flex items-center justify-center gap-1 w-full mx-auto">
+              <a href="${escapeHtml(locationUrl)}" target="_blank"
+                 class="inline-flex flex-col items-center gap-0.5 px-1.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold transition shadow-xs w-full"
+                 title="Buka Titik Lokasi GPS ODC (${escapeHtml(odcName)})">
+                 <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
+                 <span class="text-[9px]">Maps</span>
+              </a>
+              ${canEdit ? `
+              <button onclick="setOdcLocation('${escapeHtml(odcName)}', '${escapeHtml(locationUrl)}')"
+                 class="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-100 rounded text-[9px] transition"
+                 title="Ubah Titik Lokasi GPS ODC">
+                 <i class="fa-solid fa-pen"></i>
+              </button>` : ''}
+           </div>`
+        : `<button onclick="${canEdit ? `setOdcLocation('${escapeHtml(odcName)}')` : `alert('Lokasi GPS untuk ODC ini belum dibagikan.')`}"
+              class="inline-flex flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 ${canEdit ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer shadow-xs' : 'bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed opacity-75'} rounded-lg text-[9px] font-semibold w-full"
+              title="${canEdit ? 'Klik untuk Atur Titik Lokasi GPS ODC' : 'GPS belum dibagikan'}">
+              <i class="fa-solid ${canEdit ? 'fa-location-crosshairs text-amber-600' : 'fa-location-dot text-slate-300'} text-[11px]"></i>
+              <span>${canEdit ? '+ Loc' : '-'}</span>
+           </button>`;
 
     // Aksi: hapus semua evident dalam grup ini (owner only), plus preview
     const isOwner = checkIsOwner();
@@ -2220,7 +2316,7 @@ function buildOdcGroupedRow(odcName, items, canEdit) {
             </div>
         </td>
         <td class="py-2.5 px-3 text-center">
-            <div class="flex justify-center w-full max-w-[52px] mx-auto">${locCell}</div>
+            <div class="flex justify-center w-full max-w-[65px] mx-auto">${locCell}</div>
         </td>
         <td class="py-2.5 px-3 text-center">
             <div class="flex justify-center w-full max-w-[52px] mx-auto">${luarBtn}</div>
@@ -2264,6 +2360,83 @@ async function deleteOdcGroup(odcName, ids) {
     filterFiles();
     if (failed > 0) alert(`Selesai. ${ids.length - failed} berhasil dihapus, ${failed} gagal.`);
     else alert(`Semua evident ODC "${odcName}" berhasil dihapus.`);
+}
+
+// Helper: Atur atau Ubah Titik Lokasi GPS ODC langsung dari Dashboard
+async function setOdcLocation(odcName, existingUrl = '') {
+    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') {
+        return alert('Akses ditolak: Hanya Owner dan Editor yang dapat mengatur lokasi.');
+    }
+    const currentVal = existingUrl && existingUrl !== 'null' ? existingUrl : '';
+    const promptMsg = currentVal
+        ? `Ubah Titik Lokasi GPS / Google Maps untuk ODC "${odcName}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`
+        : `Atur Titik Lokasi GPS / Google Maps untuk ODC "${odcName}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`;
+
+    const input = prompt(promptMsg, currentVal);
+    if (input === null) return;
+    const trimmed = input.trim();
+    if (!trimmed && currentVal) {
+        if (!confirm(`Hapus titik lokasi GPS untuk ODC "${odcName}"?`)) return;
+    }
+
+    let finalUrl = trimmed;
+    let lat = null;
+    let lng = null;
+
+    if (trimmed) {
+        const mCoord = trimmed.match(/^([-+]?[0-9]*\.?[0-9]+)[\s,]+([-+]?[0-9]*\.?[0-9]+)$/);
+        if (mCoord) {
+            lat = parseFloat(mCoord[1]);
+            lng = parseFloat(mCoord[2]);
+            finalUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        } else if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+            finalUrl = `https://${trimmed}`;
+        }
+    } else {
+        finalUrl = null;
+    }
+
+    const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const targetNorm = norm(odcName);
+    const targetIds = [];
+
+    sampleData.forEach(item => {
+        const unitName = getOdcUnitName(item);
+        if (norm(unitName) === targetNorm || norm(item.deviceLabel || '').includes(targetNorm)) {
+            item.locationUrl = finalUrl;
+            if (lat && lng) {
+                item.latitude = lat;
+                item.longitude = lng;
+            } else if (!finalUrl) {
+                item.latitude = null;
+                item.longitude = null;
+            }
+            if (item.id) targetIds.push(item.id);
+        }
+    });
+
+    try {
+        const payload = { location_url: finalUrl };
+        if (lat && lng) {
+            payload.latitude = lat;
+            payload.longitude = lng;
+        } else if (!finalUrl) {
+            payload.latitude = null;
+            payload.longitude = null;
+        }
+
+        if (targetIds.length > 0) {
+            await supabaseClient.from('evidents').update(payload).in('id', targetIds);
+        }
+        await supabaseClient.from('evidents').update(payload).ilike('device_label', `%${odcName}%`);
+
+        alert(`Titik lokasi GPS untuk ODC "${odcName}" berhasil disimpan!`);
+    } catch (e) {
+        console.error("Gagal update lokasi ODC ke Supabase:", e);
+        alert("Gagal simpan ke database: " + (e.message || e));
+    }
+
+    filterFiles();
 }
 
 function renderTable(data, isSearchMode = false) {
