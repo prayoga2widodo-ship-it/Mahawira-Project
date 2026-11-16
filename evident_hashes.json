@@ -592,5 +592,14 @@
     "deviceLabel": "ODP-SKD 01/05 [LABEL]",
     "date": "16/11/2026, 08.48.57",
     "fileName": "evident_ODP-SKD_01_05_[LABEL]_[H:27a448e73b791add][DH:ca8081c9c1a1a1a1]_1794793737536.jpg"
+  },
+  {
+    "sha256": "0f59faf0c2123a26b0a309376a897231beb6d52613f46585a7884a6883d35ada",
+    "dhash": "41018101015a4242",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "TIANG",
+    "deviceLabel": "TIANG-MNG01",
+    "date": "16/11/2026, 09.17.46",
+    "fileName": "evident_TIANG-MNG01_[H:0f59faf0c2123a26][DH:41018101015a4242]_1794795431224.jpg"
   }
 ]
