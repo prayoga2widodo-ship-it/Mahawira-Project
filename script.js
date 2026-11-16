@@ -1124,12 +1124,15 @@ function isItemMatchingCategory(item, targetCat) {
         const fName = (item.name || '').trim().toUpperCase();
         const itemCat = (item.category || '').trim().toUpperCase();
 
-        // Jangan masukkan evident modem pelanggan atau ODP murni ke folder ODC
+        // Jangan masukkan evident modem pelanggan, ODP murni, atau TIANG ke folder ODC
         const isModem = dLabel.includes('MODEM') || fName.includes('MODEM') || Boolean(item.customerId || item.modemSn);
         if (isModem) return false;
 
         const isOdp = dLabel.startsWith('ODP') || fName.startsWith('EVIDENT_ODP');
         if (isOdp) return false;
+
+        const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
+        if (isTiang) return false;
 
         if (itemCat === 'ODC' || itemCat.startsWith('ODC')) return true;
         if (dLabel.startsWith('ODC')) return true;
@@ -1154,6 +1157,10 @@ function isItemMatchingCategory(item, targetCat) {
     if (tNorm === 'ODP') {
         const dLabel = (item.deviceLabel || '').trim().toUpperCase();
         const itemCat = (item.category || '').trim().toUpperCase();
+        const fName = (item.name || '').trim().toUpperCase();
+        const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
+        if (isTiang) return false;
+
         const isModem = dLabel.includes('MODEM') || Boolean(item.customerId || item.modemSn);
         if (!isModem && (itemCat === 'ODP' || dLabel.startsWith('ODP') || Boolean(item.odpName))) {
             return true;
@@ -1165,7 +1172,8 @@ function isItemMatchingCategory(item, targetCat) {
     if (tNorm === 'TIANG') {
         const itemCat = (item.category || '').trim().toUpperCase();
         const dLabel = (item.deviceLabel || '').trim().toUpperCase();
-        if (itemCat === 'TIANG' || dLabel.startsWith('TIANG') || (item.name && item.name.toUpperCase().includes('TIANG'))) {
+        const fName = (item.name || '').trim().toUpperCase();
+        if (itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG')) {
             return true;
         }
         return false;
@@ -2439,6 +2447,231 @@ async function setOdcLocation(odcName, existingUrl = '') {
     filterFiles();
 }
 
+// =====================================================================
+// RENDER TABLE TIANG: Khusus folder TIANG → 1 baris per unit Tiang dengan
+// kolom: LABEL TIANG | VIEW EVIDENT | SHARE LOC | PENGUNGGAH | TANGGAL & WAKTU | AKSI
+// =====================================================================
+function setTiangTableHeader() {
+    const thead = document.getElementById('fileTableHead');
+    if (!thead) return;
+    thead.innerHTML = `
+        <tr class="bg-amber-50/80 border-b border-amber-200/80 text-amber-800 text-[10.5px] font-bold uppercase tracking-wider">
+            <th class="py-2.5 px-3 min-w-[140px]"><i class="fa-solid fa-tower-broadcast mr-1 text-amber-600"></i>Label Tiang</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-image mr-1 text-blue-500"></i>View Evident</th>
+            <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-location-dot mr-1 text-emerald-500"></i>Share Loc</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah</th>
+            <th class="py-2.5 px-3"><i class="fa-solid fa-calendar mr-1 text-slate-400"></i>Tanggal &amp; Waktu</th>
+            <th class="py-2.5 px-3 text-right">Aksi</th>
+        </tr>
+    `;
+}
+
+function buildTiangGroupedRow(tiangLabel, items, canEdit) {
+    const newest = items.reduce((a, b) => ((a.id || 0) > (b.id || 0) ? a : b), items[0] || {});
+
+    // Label Tiang
+    const labelCell = `
+        <div class="flex flex-col gap-0.5">
+            <span class="inline-flex items-center gap-1.5 font-bold text-amber-800 text-[11px]">
+                <i class="fa-solid fa-tower-broadcast text-amber-600 text-[10px]"></i>
+                ${escapeHtml(tiangLabel)}
+            </span>
+            ${items.length > 1 ? `<span class="text-[9.5px] text-slate-400 font-medium">${items.length} foto evident</span>` : ''}
+        </div>
+    `;
+
+    // View Evident
+    let viewEvidentCell = '';
+    if (items.length === 1) {
+        viewEvidentCell = `
+            <button onclick="previewFile(${items[0].id})"
+                class="inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition shadow-xs whitespace-nowrap cursor-pointer"
+                title="Lihat Evident Tiang (${items[0].size || '-'})">
+                <i class="fa-solid fa-eye text-blue-600 text-[11px]"></i>
+                <span class="text-[10px]">View</span>
+            </button>
+        `;
+    } else {
+        viewEvidentCell = `
+            <div class="inline-flex items-center justify-center gap-1 flex-wrap">
+                ${items.map((it, idx) => `
+                    <button onclick="previewFile(${it.id})"
+                        class="inline-flex items-center gap-0.5 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md text-[10px] font-semibold transition shadow-2xs cursor-pointer"
+                        title="Lihat Foto ${idx + 1} (${it.size || '-'})">
+                        <i class="fa-solid fa-image text-[9px] text-blue-600"></i>
+                        <span>Foto ${idx + 1}</span>
+                    </button>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    // Share Loc
+    const locItem = items.find(it => it.locationUrl) || items.find(it => it.latitude && it.longitude) || null;
+    const locationUrl = locItem ? (locItem.locationUrl || `https://www.google.com/maps?q=${locItem.latitude},${locItem.longitude}`) : null;
+
+    const locCell = locationUrl
+        ? `<div class="flex items-center justify-center gap-1 w-full mx-auto">
+              <a href="${escapeHtml(locationUrl)}" target="_blank"
+                 class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold transition shadow-xs"
+                 title="Buka Titik Lokasi GPS Tiang (${escapeHtml(tiangLabel)})">
+                 <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
+                 <span class="text-[9.5px]">Maps</span>
+              </a>
+              ${canEdit ? `
+              <button onclick="setTiangLocation('${escapeHtml(tiangLabel)}', '${escapeHtml(locationUrl)}')"
+                 class="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-100 rounded text-[9px] transition cursor-pointer"
+                 title="Ubah Titik Lokasi GPS Tiang">
+                 <i class="fa-solid fa-pen"></i>
+              </button>` : ''}
+           </div>`
+        : `<button onclick="${canEdit ? `setTiangLocation('${escapeHtml(tiangLabel)}')` : `alert('Lokasi GPS untuk Tiang ini belum dibagikan.')`}"
+              class="inline-flex items-center justify-center gap-1 px-2 py-1.5 ${canEdit ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer shadow-xs' : 'bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed opacity-75'} rounded-lg text-[9.5px] font-semibold"
+              title="${canEdit ? 'Klik untuk Atur Titik Lokasi GPS Tiang' : 'GPS belum dibagikan'}">
+              <i class="fa-solid ${canEdit ? 'fa-location-crosshairs text-amber-600' : 'fa-location-dot text-slate-300'} text-[11px]"></i>
+              <span>${canEdit ? '+ Loc' : '-'}</span>
+           </button>`;
+
+    // Pengunggah
+    const uploaderCell = `<span class="font-medium text-slate-700 text-[10.5px]">${escapeHtml(newest.uploader || '-')}</span>`;
+
+    // Tanggal dan Waktu
+    const dateCell = `<span class="text-slate-400 text-[10.5px]">${escapeHtml(newest.date || '-')}</span>`;
+
+    // Aksi (Owner can delete, Editor/Viewer can preview)
+    const isOwner = checkIsOwner();
+    const allIds = items.map(it => it.id).filter(Boolean);
+    const deleteGroupBtn = isOwner && allIds.length > 0
+        ? `<button onclick="deleteTiangGroup('${escapeHtml(tiangLabel)}', [${allIds.join(',')}])"
+                class="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10.5px] font-semibold transition shadow-xs cursor-pointer"
+                title="Hapus Semua Evident Tiang ${escapeHtml(tiangLabel)} (Owner)">
+                <i class="fa-solid fa-trash-can text-[10px]"></i>
+                <span>Hapus</span>
+           </button>`
+        : '';
+
+    const tr = document.createElement('tr');
+    tr.className = 'bg-amber-50/30 hover:bg-amber-50/60 border-b border-amber-100 transition';
+    tr.innerHTML = `
+        <td class="py-2.5 px-3">${labelCell}</td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[120px] mx-auto">${viewEvidentCell}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+            <div class="flex justify-center w-full max-w-[75px] mx-auto">${locCell}</div>
+        </td>
+        <td class="py-2.5 px-3">${uploaderCell}</td>
+        <td class="py-2.5 px-3">${dateCell}</td>
+        <td class="py-2.5 px-3 text-right whitespace-nowrap">${deleteGroupBtn}</td>
+    `;
+    return tr;
+}
+
+// Helper: Hapus semua evident dalam satu grup Tiang (Owner only)
+async function deleteTiangGroup(labelTiang, ids) {
+    if (!checkIsOwner()) return alert('Akses Ditolak: Hanya Owner yang dapat menghapus.');
+    if (!confirm(`PERINGATAN OWNER:\nHapus semua ${ids.length} berkas evident untuk Tiang "${labelTiang}"?\n\nAksi ini tidak dapat dibatalkan.`)) return;
+
+    let failed = 0;
+    for (const id of ids) {
+        try {
+            const item = sampleData.find(d => d.id === id);
+            if (item && item.fileUrl) {
+                const fileName = item.fileUrl.split('/').pop().split('?')[0];
+                try { await supabaseClient.storage.from('evidents').remove([`uploads/${decodeURIComponent(fileName)}`]); } catch (e) {}
+            }
+            const { error } = await supabaseClient.from('evidents').delete().eq('id', id);
+            if (error) failed++;
+            else sampleData = sampleData.filter(d => d.id !== id);
+        } catch (e) { failed++; }
+    }
+
+    renderCategoryUI();
+    filterFiles();
+    if (failed > 0) alert(`Selesai. ${ids.length - failed} berhasil dihapus, ${failed} gagal.`);
+    else alert(`Semua evident Tiang "${labelTiang}" berhasil dihapus.`);
+}
+
+// Helper: Atur atau Ubah Titik Lokasi GPS Tiang langsung dari Dashboard
+async function setTiangLocation(labelTiang, existingUrl = '') {
+    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') {
+        return alert('Akses ditolak: Hanya Owner dan Editor yang dapat mengatur lokasi.');
+    }
+    const currentVal = existingUrl && existingUrl !== 'null' ? existingUrl : '';
+    const promptMsg = currentVal
+        ? `Ubah Titik Lokasi GPS / Google Maps untuk Tiang "${labelTiang}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`
+        : `Atur Titik Lokasi GPS / Google Maps untuk Tiang "${labelTiang}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`;
+
+    const input = prompt(promptMsg, currentVal);
+    if (input === null) return;
+    const trimmed = input.trim();
+    if (!trimmed && currentVal) {
+        if (!confirm(`Hapus titik lokasi GPS untuk Tiang "${labelTiang}"?`)) return;
+    }
+
+    let finalUrl = trimmed;
+    let lat = null;
+    let lng = null;
+
+    if (trimmed) {
+        const mCoord = trimmed.match(/^([-+]?[0-9]*\.?[0-9]+)[\s,]+([-+]?[0-9]*\.?[0-9]+)$/);
+        if (mCoord) {
+            lat = parseFloat(mCoord[1]);
+            lng = parseFloat(mCoord[2]);
+            finalUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        } else if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+            finalUrl = `https://${trimmed}`;
+        }
+    } else {
+        finalUrl = null;
+    }
+
+    const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const targetNorm = norm(labelTiang);
+    const targetIds = [];
+
+    sampleData.forEach(item => {
+        const itemLbl = (item.deviceLabel || item.name || '').toUpperCase();
+        if (norm(itemLbl) === targetNorm || norm(itemLbl).includes(targetNorm)) {
+            item.locationUrl = finalUrl;
+            if (lat && lng) {
+                item.latitude = lat;
+                item.longitude = lng;
+            } else if (!finalUrl) {
+                item.latitude = null;
+                item.longitude = null;
+            }
+            if (item.id) targetIds.push(item.id);
+        }
+    });
+
+    try {
+        const payload = { location_url: finalUrl };
+        if (lat && lng) {
+            payload.latitude = lat;
+            payload.longitude = lng;
+        } else if (!finalUrl) {
+            payload.latitude = null;
+            payload.longitude = null;
+        }
+
+        if (targetIds.length > 0) {
+            await supabaseClient.from('evidents').update(payload).in('id', targetIds);
+        }
+        await supabaseClient.from('evidents').update(payload).ilike('device_label', `%${labelTiang}%`);
+
+        alert(`Titik lokasi GPS untuk Tiang "${labelTiang}" berhasil disimpan!`);
+    } catch (e) {
+        console.error("Gagal update lokasi Tiang ke Supabase:", e);
+        alert("Gagal simpan ke database: " + (e.message || e));
+    }
+
+    filterFiles();
+}
+
+window.deleteTiangGroup = deleteTiangGroup;
+window.setTiangLocation = setTiangLocation;
+
 function renderTable(data, isSearchMode = false) {
     const tbody = document.getElementById('fileTableBody');
     if (!tbody) return;
@@ -2604,6 +2837,51 @@ function renderTable(data, isSearchMode = false) {
         const sortedNames = Object.keys(odcGroups).sort((a, b) => a.localeCompare(b));
         sortedNames.forEach(name => {
             tbody.appendChild(buildOdcGroupedRow(name, odcGroups[name], canEdit));
+        });
+
+        updateStats();
+        return;
+    }
+
+    // ===== MODE KHUSUS: Folder TIANG → Tampilkan tabel format khusus Tiang =====
+    if (currentCategory === 'TIANG' && !isSearchMode) {
+        setTiangTableHeader();
+
+        const tiangData = data && data.length > 0 ? data : sampleData.filter(item => {
+            const cat = (item.category || '').toUpperCase();
+            const lbl = (item.deviceLabel || '').toUpperCase();
+            const nm = (item.name || '').toUpperCase();
+            return cat === 'TIANG' || lbl.startsWith('TIANG') || lbl.startsWith('T.') || nm.includes('TIANG');
+        });
+
+        if (!tiangData || tiangData.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="py-10 text-center text-slate-400">
+                        <i class="fa-solid fa-tower-broadcast text-2xl text-slate-300 mb-1.5 block"></i>
+                        <p class="font-medium text-xs">Belum ada berkas evident Tiang yang tersimpan.</p>
+                    </td>
+                </tr>
+            `;
+            updateStats();
+            return;
+        }
+
+        // Grup berdasarkan label tiang
+        const tiangGroups = {};
+        tiangData.forEach(item => {
+            const label = (item.deviceLabel && item.deviceLabel.trim())
+                ? item.deviceLabel.trim().toUpperCase()
+                : (item.name && item.name.toUpperCase().includes('TIANG') ? item.name.trim().toUpperCase() : `TIANG #${item.id}`);
+            if (!tiangGroups[label]) tiangGroups[label] = { label: (item.deviceLabel || label), items: [] };
+            tiangGroups[label].items.push(item);
+        });
+
+        const sortedKeys = Object.keys(tiangGroups).sort((a, b) =>
+            a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+        );
+        sortedKeys.forEach(k => {
+            tbody.appendChild(buildTiangGroupedRow(tiangGroups[k].label, tiangGroups[k].items, canEdit));
         });
 
         updateStats();

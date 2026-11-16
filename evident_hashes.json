@@ -556,5 +556,41 @@
     "deviceLabel": "MODEM [ODP-SKD 02/02] - ID: 557/RTL/WNJ-007/001 | Nama: FEBRI HAIHAQ | SN: ZTEGC871921111 [TAMPAK BELAKANG]",
     "date": "16/11/2026, 08.32.36",
     "fileName": "evident_modem_ODP-SKD_02_02_ID_557RTLWNJ-007001_SN_ZTEGC871921111_[BELAKANG]_[H:18fbfb2fab87284e][DH:64767676d45450c4]_1794792756128.jpg"
+  },
+  {
+    "sha256": "34e35344cb3563e7040a7d799e934e7821a7e2012c0b791a67b59221df685138",
+    "dhash": "6059706060586060",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "ODP-SKD 01/05 [TAMPAK LUAR]",
+    "date": "16/11/2026, 08.48.30",
+    "fileName": "evident_ODP-SKD_01_05_[TAMPAK_LUAR]_[H:34e35344cb3563e7][DH:6059706060586060]_1794793708206.jpg"
+  },
+  {
+    "sha256": "aae832f8929259c5071afff83cff1533cb19ca704553c41eaf96da637c782f12",
+    "dhash": "ca92868696860072",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "ODP-SKD 01/05 [TAMPAK DALAM]",
+    "date": "16/11/2026, 08.48.39",
+    "fileName": "evident_ODP-SKD_01_05_[TAMPAK_DALAM]_[H:aae832f8929259c5][DH:ca92868696860072]_1794793718987.jpg"
+  },
+  {
+    "sha256": "04bd6fa79cf9d2205cffa5e46f1c8118caed4123a24370a99d4fcb101b1cf790",
+    "dhash": "ce7830a98f8f8fb3",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "ODP-SKD 01/05 [REDAMAN]",
+    "date": "16/11/2026, 08.48.48",
+    "fileName": "evident_ODP-SKD_01_05_[REDAMAN]_[H:04bd6fa79cf9d220][DH:ce7830a98f8f8fb3]_1794793727673.jpg"
+  },
+  {
+    "sha256": "27a448e73b791add3c9c7be0fd328bb94d66d1bfff89a33de4f35b753be726bf",
+    "dhash": "ca8081c9c1a1a1a1",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "ODP-SKD 01/05 [LABEL]",
+    "date": "16/11/2026, 08.48.57",
+    "fileName": "evident_ODP-SKD_01_05_[LABEL]_[H:27a448e73b791add][DH:ca8081c9c1a1a1a1]_1794793737536.jpg"
   }
 ]
