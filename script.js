@@ -785,6 +785,8 @@ async function fetchSupabaseData() {
 
         renderCategoryUI();
         filterFiles();
+        if (typeof updateKmlStats === 'function') updateKmlStats();
+        if (typeof renderKmlPoints === 'function' && kmlLeafletMap) renderKmlPoints();
     } catch (err) {
         console.error("Gagal terhubung ke Supabase:", err);
         accessList = { [APP_CONFIG.ownerEmail.toLowerCase()]: "owner" };
@@ -798,6 +800,8 @@ async function fetchSupabaseData() {
         }
         renderCategoryUI();
         filterFiles();
+        if (typeof updateKmlStats === 'function') updateKmlStats();
+        if (typeof renderKmlPoints === 'function' && kmlLeafletMap) renderKmlPoints();
     }
 }
 
@@ -3472,3 +3476,610 @@ function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.classList.add('hidden');
 }
+
+// =====================================================================
+// MODUL PETA KML & GIS LAPANGAN (LEAFLET + GOOGLE EARTH + NAVIGASI GPS)
+// =====================================================================
+let currentMainView = 'evident';
+let kmlLeafletMap = null;
+let kmlOsmTileLayer = null;
+let kmlSatelliteTileLayer = null;
+let isKmlSatelliteMode = false;
+let kmlMarkersLayer = null;
+let kmlUserLocationMarker = null;
+let activeKmlLayerFilter = 'all';
+let kmlMarkersList = [];
+
+// Helper Ekstraksi Koordinat GPS (dari latitude/longitude langsung atau dari locationUrl)
+function extractCoordinates(item) {
+    if (!item) return null;
+    let lat = parseFloat(item.latitude);
+    let lng = parseFloat(item.longitude);
+    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        return { lat, lng };
+    }
+    if (item.locationUrl) {
+        const match = item.locationUrl.match(/[-+]?([1-8]?\d(?:\.\d+)?|90(?:\.0+)?),\s*[-+]?(?:180(?:\.0+)?|(?:(?:1[0-7]\d)|(?:[1-9]?\d))(?:\.\d+)?)/);
+        if (match) {
+            const parts = match[0].split(',');
+            lat = parseFloat(parts[0].trim());
+            lng = parseFloat(parts[1].trim());
+            if (!isNaN(lat) && !isNaN(lng)) {
+                return { lat, lng };
+            }
+        }
+    }
+    return null;
+}
+
+// Navigasi Antara Menu Berkas Evident & Menu Peta KML & GIS
+function switchMainView(viewName) {
+    currentMainView = viewName;
+    const evidentView = document.getElementById('evidentView');
+    const kmlView = document.getElementById('kmlView');
+    const tabEvident = document.getElementById('navTabEvident');
+    const tabKml = document.getElementById('navTabKml');
+
+    if (viewName === 'kml') {
+        if (evidentView) evidentView.classList.add('hidden');
+        if (kmlView) kmlView.classList.remove('hidden');
+
+        if (tabEvident) {
+            tabEvident.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer";
+        }
+        if (tabKml) {
+            tabKml.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-600 text-white shadow-xs cursor-pointer";
+        }
+
+        if (!kmlLeafletMap) {
+            initKmlMap();
+        } else {
+            setTimeout(() => {
+                if (kmlLeafletMap) kmlLeafletMap.invalidateSize();
+            }, 150);
+        }
+
+        updateKmlStats();
+        renderKmlPoints(activeKmlLayerFilter);
+    } else {
+        if (kmlView) kmlView.classList.add('hidden');
+        if (evidentView) evidentView.classList.remove('hidden');
+
+        if (tabEvident) {
+            tabEvident.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-blue-600 text-white shadow-xs cursor-pointer";
+        }
+        if (tabKml) {
+            tabKml.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer";
+        }
+    }
+}
+
+// Inisialisasi Canvas Peta Leaflet
+function initKmlMap() {
+    const canvas = document.getElementById('kmlMapCanvas');
+    if (!canvas || typeof L === 'undefined') return;
+
+    // Tile Street Map OpenStreetMap
+    kmlOsmTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    });
+
+    // Tile Citra Satelit Esri World Imagery (HD)
+    kmlSatelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    });
+
+    // Default Posisi Tengah (Indonesia)
+    kmlLeafletMap = L.map('kmlMapCanvas', {
+        center: [-7.0, 110.0],
+        zoom: 7,
+        layers: [kmlOsmTileLayer],
+        zoomControl: true
+    });
+
+    kmlMarkersLayer = L.layerGroup().addTo(kmlLeafletMap);
+
+    setTimeout(() => {
+        if (kmlLeafletMap) kmlLeafletMap.invalidateSize();
+    }, 200);
+
+    updateKmlStats();
+    renderKmlPoints(activeKmlLayerFilter);
+}
+
+// Toggle Mode Peta Jalan vs Satelit
+function toggleMapBasemap() {
+    if (!kmlLeafletMap || !kmlOsmTileLayer || !kmlSatelliteTileLayer) return;
+
+    const label = document.getElementById('basemapLabel');
+    if (isKmlSatelliteMode) {
+        kmlLeafletMap.removeLayer(kmlSatelliteTileLayer);
+        kmlLeafletMap.addLayer(kmlOsmTileLayer);
+        isKmlSatelliteMode = false;
+        if (label) label.textContent = "Mode Satelit";
+    } else {
+        kmlLeafletMap.removeLayer(kmlOsmTileLayer);
+        kmlLeafletMap.addLayer(kmlSatelliteTileLayer);
+        isKmlSatelliteMode = true;
+        if (label) label.textContent = "Mode Peta Jalan";
+    }
+}
+
+// Update Ringkasan Angka Statistik GPS KML
+function updateKmlStats() {
+    if (!sampleData || !Array.isArray(sampleData)) return;
+
+    let totalGps = 0;
+    let odcCount = 0;
+    let odpCount = 0;
+    let tiangCount = 0;
+
+    sampleData.forEach(item => {
+        const coords = extractCoordinates(item);
+        if (coords) {
+            totalGps++;
+            const cat = (item.category || '').toUpperCase();
+            if (cat.includes('ODC')) odcCount++;
+            else if (cat.includes('ODP')) odpCount++;
+            else if (cat.includes('TIANG')) tiangCount++;
+        }
+    });
+
+    const elTotal = document.getElementById('kmlStatTotal');
+    const elOdc = document.getElementById('kmlStatOdc');
+    const elOdp = document.getElementById('kmlStatOdp');
+    const elTiang = document.getElementById('kmlStatTiang');
+
+    if (elTotal) elTotal.textContent = totalGps;
+    if (elOdc) elOdc.textContent = odcCount;
+    if (elOdp) elOdp.textContent = odpCount;
+    if (elTiang) elTiang.textContent = tiangCount;
+
+    const elLayerAll = document.getElementById('countLayerAll');
+    const elLayerOdc = document.getElementById('countLayerOdc');
+    const elLayerOdp = document.getElementById('countLayerOdp');
+    const elLayerTiang = document.getElementById('countLayerTiang');
+
+    if (elLayerAll) elLayerAll.textContent = totalGps;
+    if (elLayerOdc) elLayerOdc.textContent = odcCount;
+    if (elLayerOdp) elLayerOdp.textContent = odpCount;
+    if (elLayerTiang) elLayerTiang.textContent = tiangCount;
+}
+
+// Render Titik-Titik Marker KML pada Canvas Peta
+function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
+    if (!kmlLeafletMap || !kmlMarkersLayer) return;
+
+    activeKmlLayerFilter = layerFilter;
+    kmlMarkersLayer.clearLayers();
+    kmlMarkersList = [];
+
+    const searchStr = (searchQuery || '').toLowerCase().trim();
+    const bounds = [];
+
+    sampleData.forEach(item => {
+        const coords = extractCoordinates(item);
+        if (!coords) return;
+
+        const cat = (item.category || '').toUpperCase();
+
+        // 1. Filter Layer Kategori
+        if (layerFilter !== 'all') {
+            if (!cat.includes(layerFilter.toUpperCase())) return;
+        }
+
+        // 2. Filter Pencarian Text
+        const titleName = item.deviceLabel || item.odpName || item.odcReference || item.name || '';
+        const matchSearch = !searchStr ||
+            titleName.toLowerCase().includes(searchStr) ||
+            (item.name || '').toLowerCase().includes(searchStr) ||
+            (item.uploader || '').toLowerCase().includes(searchStr) ||
+            (item.customerName || '').toLowerCase().includes(searchStr) ||
+            (item.modemSn || '').toLowerCase().includes(searchStr);
+
+        if (!matchSearch) return;
+
+        // Tentukan Warna & Ikon Marker Berdasarkan Kategori
+        let pinColor = '#475569'; // Default slate
+        let pinIcon = 'fa-location-dot';
+        let catBadgeBg = 'bg-slate-100 text-slate-800';
+        let catLabel = item.category || 'TITIK';
+
+        if (cat.includes('ODC')) {
+            pinColor = '#2563eb'; // Biru ODC
+            pinIcon = 'fa-server';
+            catBadgeBg = 'bg-blue-100 text-blue-800 border-blue-200';
+            catLabel = 'ODC';
+        } else if (cat.includes('ODP')) {
+            pinColor = '#16a34a'; // Hijau ODP
+            pinIcon = 'fa-network-wired';
+            catBadgeBg = 'bg-green-100 text-green-800 border-green-200';
+            catLabel = 'ODP';
+        } else if (cat.includes('TIANG')) {
+            pinColor = '#d97706'; // Oranye Tiang
+            pinIcon = 'fa-tower-broadcast';
+            catBadgeBg = 'bg-amber-100 text-amber-800 border-amber-200';
+            catLabel = 'TIANG';
+        }
+
+        // Custom DivIcon HTML (Circle Badge dengan Efek Drop Shadow)
+        const customMarkerHtml = `
+            <div class="custom-kml-marker" style="background-color: ${pinColor}; width: 28px; height: 28px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.3); border: 2px solid #ffffff; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fa-solid ${pinIcon}" style="font-size: 11px;"></i>
+            </div>
+        `;
+
+        const leafletIcon = L.divIcon({
+            className: 'kml-pin-wrapper',
+            html: customMarkerHtml,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            popupAnchor: [0, -14]
+        });
+
+        // Konten Popup Interaktif
+        const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
+        const viewPhotoBtn = item.fileUrl ? `
+            <div class="mt-2.5 rounded-lg overflow-hidden border border-slate-200 max-h-36 bg-slate-900/5 relative group cursor-pointer" onclick="previewFile(${item.id})">
+                <img src="${item.fileUrl}" alt="${escapeHtml(titleName)}" class="w-full h-32 object-cover group-hover:scale-105 transition duration-300" onerror="this.style.display='none'">
+                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1.5">
+                    <i class="fa-solid fa-eye"></i> Perbesar Foto
+                </div>
+            </div>
+        ` : '';
+
+        const popupHtml = `
+            <div class="p-2 space-y-2 max-w-[270px] text-slate-800">
+                <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${catBadgeBg}">${catLabel}</span>
+                    <span class="text-[9.5px] font-mono text-slate-400">#${item.id || '-'}</span>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(titleName)}</h4>
+                    ${item.odcReference ? `<p class="text-[10px] text-slate-500 font-semibold mt-0.5"><i class="fa-solid fa-server mr-1 text-blue-500"></i>Induk: ${escapeHtml(item.odcReference)}</p>` : ''}
+                </div>
+
+                <div class="bg-slate-50 p-2 rounded-lg border border-slate-200/80 space-y-1 text-[10px]">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500"><i class="fa-solid fa-location-crosshairs mr-1 text-emerald-600"></i>Koordinat:</span>
+                        <span class="font-mono font-bold text-slate-700">${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah:</span>
+                        <span class="font-medium text-slate-700 truncate max-w-[120px]">${escapeHtml(item.uploader || '-')}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500"><i class="fa-solid fa-clock mr-1 text-slate-400"></i>Waktu:</span>
+                        <span class="font-medium text-slate-600">${escapeHtml(item.date || '-')}</span>
+                    </div>
+                </div>
+
+                ${viewPhotoBtn}
+
+                <div class="pt-1.5 flex flex-col gap-1.5">
+                    <a href="${navUrl}" target="_blank" rel="noopener noreferrer"
+                        class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition shadow-xs shadow-emerald-600/30">
+                        <i class="fa-solid fa-diamond-turn-right text-xs"></i>
+                        <span>Navigasi Rute (Google Maps)</span>
+                    </a>
+                </div>
+            </div>
+        `;
+
+        const marker = L.marker([coords.lat, coords.lng], { icon: leafletIcon })
+            .bindPopup(popupHtml, { maxWidth: 300 });
+
+        kmlMarkersLayer.addLayer(marker);
+        bounds.push([coords.lat, coords.lng]);
+
+        kmlMarkersList.push({
+            id: item.id,
+            name: titleName,
+            category: cat,
+            marker: marker,
+            coords: coords
+        });
+    });
+
+    // Auto-fit batas peta ke semua titik yang ada jika bukan sedang mengetik query spesifik
+    if (bounds.length > 0 && !searchStr) {
+        kmlLeafletMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+    }
+}
+
+// Filter Layer Berdasarkan Tombol Kategori
+function filterKmlLayer(layerType) {
+    const buttons = {
+        all: document.getElementById('btnLayerAll'),
+        ODC: document.getElementById('btnLayerOdc'),
+        ODP: document.getElementById('btnLayerOdp'),
+        TIANG: document.getElementById('btnLayerTiang')
+    };
+
+    Object.keys(buttons).forEach(key => {
+        const btn = buttons[key];
+        if (!btn) return;
+        if (key === layerType) {
+            btn.className = "kml-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900 text-white shadow-2xs transition cursor-pointer";
+        } else {
+            btn.className = "kml-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition cursor-pointer";
+        }
+    });
+
+    const searchInput = document.getElementById('kmlSearchInput');
+    const query = searchInput ? searchInput.value : '';
+    renderKmlPoints(layerType, query);
+}
+
+// Pencarian Titik di Peta & Auto FlyTo
+function searchKmlPoints(query) {
+    const clearBtn = document.getElementById('clearKmlSearchBtn');
+    if (clearBtn) {
+        if (query && query.length > 0) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+    }
+
+    renderKmlPoints(activeKmlLayerFilter, query);
+
+    if (query && query.length >= 2 && kmlMarkersList.length > 0) {
+        const first = kmlMarkersList[0];
+        if (first && first.coords && kmlLeafletMap) {
+            kmlLeafletMap.flyTo([first.coords.lat, first.coords.lng], 17, { duration: 1.2 });
+            setTimeout(() => {
+                if (first.marker) first.marker.openPopup();
+            }, 1200);
+        }
+    }
+}
+
+// Hapus Input Pencarian Peta
+function clearKmlSearch() {
+    const searchInput = document.getElementById('kmlSearchInput');
+    if (searchInput) searchInput.value = '';
+    const clearBtn = document.getElementById('clearKmlSearchBtn');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    renderKmlPoints(activeKmlLayerFilter, '');
+}
+
+// Deteksi Lokasi Teknisi / Pengguna (GPS Handphone)
+function locateUserPosition() {
+    if (!navigator.geolocation) {
+        alert("Browser atau perangkat Anda tidak mendukung akses lokasi GPS.");
+        return;
+    }
+
+    const btn = document.getElementById('btnUserLocation');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Membaca GPS...</span>`;
+
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            if (btn) btn.innerHTML = originalText;
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            if (kmlUserLocationMarker && kmlLeafletMap) {
+                kmlLeafletMap.removeLayer(kmlUserLocationMarker);
+            }
+
+            const userIcon = L.divIcon({
+                className: 'user-gps-marker',
+                html: `
+                    <div style="position: relative; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;">
+                        <span style="position: absolute; width: 100%; height: 100%; border-radius: 9999px; background-color: rgba(239, 68, 68, 0.5); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></span>
+                        <span style="position: relative; width: 14px; height: 14px; border-radius: 9999px; background-color: #ef4444; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.4);"></span>
+                    </div>
+                `,
+                iconSize: [22, 22],
+                iconAnchor: [11, 11]
+            });
+
+            kmlUserLocationMarker = L.marker([lat, lng], { icon: userIcon })
+                .bindPopup(`
+                    <div class="p-2 text-center text-xs">
+                        <p class="font-bold text-rose-600"><i class="fa-solid fa-person-walking mr-1"></i>Posisi Anda Saat Ini</p>
+                        <p class="font-mono text-[10px] text-slate-500 mt-1">${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+                        <p class="text-[9.5px] text-slate-400 mt-0.5">Akurasi &plusmn;${Math.round(pos.coords.accuracy)} meter</p>
+                    </div>
+                `);
+
+            if (kmlLeafletMap) {
+                kmlUserLocationMarker.addTo(kmlLeafletMap);
+                kmlLeafletMap.flyTo([lat, lng], 17, { duration: 1.2 });
+                setTimeout(() => {
+                    kmlUserLocationMarker.openPopup();
+                }, 1300);
+            }
+        },
+        (err) => {
+            if (btn) btn.innerHTML = originalText;
+            alert("Gagal membaca koordinat GPS: " + err.message + ". Pastikan izin lokasi (GPS) pada HP atau browser telah diizinkan.");
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+// Generate & Export Berkas .KML Standar Google Earth
+function exportKmlFile() {
+    if (!sampleData || !Array.isArray(sampleData)) {
+        alert("Tidak ada data evident yang tersedia untuk diekspor ke KML.");
+        return;
+    }
+
+    const grouped = {
+        ODC: [],
+        ODP: [],
+        TIANG: [],
+        LAINNYA: []
+    };
+
+    let totalPoints = 0;
+
+    sampleData.forEach(item => {
+        const coords = extractCoordinates(item);
+        if (!coords) return;
+
+        totalPoints++;
+        const cat = (item.category || '').toUpperCase();
+        if (cat.includes('ODC')) grouped.ODC.push({ item, coords });
+        else if (cat.includes('ODP')) grouped.ODP.push({ item, coords });
+        else if (cat.includes('TIANG')) grouped.TIANG.push({ item, coords });
+        else grouped.LAINNYA.push({ item, coords });
+    });
+
+    if (totalPoints === 0) {
+        alert("Belum ada data shareloc GPS pada berkas evident Anda.");
+        return;
+    }
+
+    const formatPlacemark = (it, c, catName) => {
+        const titleName = it.deviceLabel || it.odpName || it.odcReference || it.name || `${catName} Item`;
+        const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
+        const photoTag = it.fileUrl ? `<p><img src="${it.fileUrl}" width="300" style="border-radius:8px;margin-top:6px;"/></p>` : '';
+        const odcTag = it.odcReference ? `<p><b>Induk ODC:</b> ${escapeHtml(it.odcReference)}</p>` : '';
+
+        const desc = `
+            <![CDATA[
+                <div style="font-family: Arial, sans-serif; font-size: 13px; line-height: 1.5; color: #1e293b;">
+                    <h3 style="color: #0f172a; margin-bottom: 4px;">${escapeHtml(titleName)}</h3>
+                    <p style="margin: 2px 0;"><b>Kategori:</b> ${escapeHtml(catName)}</p>
+                    ${odcTag}
+                    <p style="margin: 2px 0;"><b>Pengunggah:</b> ${escapeHtml(it.uploader || '-')}</p>
+                    <p style="margin: 2px 0;"><b>Tanggal:</b> ${escapeHtml(it.date || '-')}</p>
+                    <p style="margin: 2px 0;"><b>Koordinat:</b> ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}</p>
+                    ${photoTag}
+                    <p style="margin-top: 10px;">
+                        <a href="${navUrl}" style="background-color: #059669; color: white; padding: 6px 12px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                            🚗 Rute Navigasi Google Maps
+                        </a>
+                    </p>
+                </div>
+            ]]>
+        `.trim();
+
+        return `
+      <Placemark>
+        <name>${escapeHtml(titleName)}</name>
+        <description>${desc}</description>
+        <styleUrl>#style_${catName.toLowerCase()}</styleUrl>
+        <Point>
+          <coordinates>${c.lng},${c.lat},0</coordinates>
+        </Point>
+      </Placemark>`;
+    };
+
+    let kmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Evident Network GIS - PT MAHAWIRA NUSANTARA GRUP</name>
+    <description>Peta Titik Jaringan ODC, ODP, dan Tiang Fiber Optik Hasil Evident Lapangan</description>
+
+    <!-- Style Marker Pin ODC (Biru) -->
+    <Style id="style_odc">
+      <IconStyle>
+        <color>ffff7800</color>
+        <scale>1.2</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+
+    <!-- Style Marker Pin ODP (Hijau) -->
+    <Style id="style_odp">
+      <IconStyle>
+        <color>ff00b000</color>
+        <scale>1.2</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+
+    <!-- Style Marker Pin TIANG (Oranye) -->
+    <Style id="style_tiang">
+      <IconStyle>
+        <color>ff008cff</color>
+        <scale>1.2</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/ylw-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+
+    <!-- Style Marker Pin LAINNYA -->
+    <Style id="style_lainnya">
+      <IconStyle>
+        <color>ff888888</color>
+        <scale>1.0</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/wht-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+`;
+
+    // Folder ODC
+    if (grouped.ODC.length > 0) {
+        kmlContent += `    <Folder>\n      <name>🌐 Perangkat ODC (${grouped.ODC.length} Titik)</name>\n`;
+        grouped.ODC.forEach(entry => {
+            kmlContent += formatPlacemark(entry.item, entry.coords, 'ODC');
+        });
+        kmlContent += `\n    </Folder>\n`;
+    }
+
+    // Folder ODP
+    if (grouped.ODP.length > 0) {
+        kmlContent += `    <Folder>\n      <name>🛜 Perangkat ODP (${grouped.ODP.length} Titik)</name>\n`;
+        grouped.ODP.forEach(entry => {
+            kmlContent += formatPlacemark(entry.item, entry.coords, 'ODP');
+        });
+        kmlContent += `\n    </Folder>\n`;
+    }
+
+    // Folder TIANG
+    if (grouped.TIANG.length > 0) {
+        kmlContent += `    <Folder>\n      <name>🗼 Tiang Fiber Optik (${grouped.TIANG.length} Titik)</name>\n`;
+        grouped.TIANG.forEach(entry => {
+            kmlContent += formatPlacemark(entry.item, entry.coords, 'TIANG');
+        });
+        kmlContent += `\n    </Folder>\n`;
+    }
+
+    // Folder Lainnya
+    if (grouped.LAINNYA.length > 0) {
+        kmlContent += `    <Folder>\n      <name>📁 Titik Lainnya (${grouped.LAINNYA.length} Titik)</name>\n`;
+        grouped.LAINNYA.forEach(entry => {
+            kmlContent += formatPlacemark(entry.item, entry.coords, 'LAINNYA');
+        });
+        kmlContent += `\n    </Folder>\n`;
+    }
+
+    kmlContent += `  </Document>\n</kml>`;
+
+    // Download File KML ke Perangkat Pengguna
+    const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.href = url;
+    link.download = `evident_network_gis_${timestamp}.kml`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// Ekspos Fungsi ke Window Global agar dapat diakses dari Elemen HTML
+window.switchMainView = switchMainView;
+window.toggleMapBasemap = toggleMapBasemap;
+window.exportKmlFile = exportKmlFile;
+window.filterKmlLayer = filterKmlLayer;
+window.searchKmlPoints = searchKmlPoints;
+window.clearKmlSearch = clearKmlSearch;
+window.locateUserPosition = locateUserPosition;
+window.updateKmlStats = updateKmlStats;
+window.renderKmlPoints = renderKmlPoints;

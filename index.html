@@ -15,6 +15,9 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Supabase JS Client SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Leaflet CSS & JS for Interactive KML & GIS Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- Custom Style -->
     <link rel="stylesheet" href="style.css">
     <script>
@@ -172,10 +175,45 @@
         </div>
     </header>
 
+    <!-- Sub-Navbar: Pemisah Menu Berkas Evident vs Menu Peta KML & GIS -->
+    <nav class="sticky top-16 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-13 py-2">
+                <div class="flex items-center gap-1 sm:gap-2">
+                    <button id="navTabEvident" onclick="switchMainView('evident')"
+                        class="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-blue-600 text-white shadow-xs">
+                        <i class="fa-solid fa-folder-closed text-xs"></i>
+                        <span>Berkas Evident (ODC, ODP, Tiang)</span>
+                    </button>
+
+                    <button id="navTabKml" onclick="switchMainView('kml')"
+                        class="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+                        <i class="fa-solid fa-earth-asia text-emerald-600 text-xs"></i>
+                        <span>Peta KML &amp; GIS Lapangan</span>
+                        <span class="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider border border-emerald-300">Live</span>
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="exportKmlFile()"
+                        class="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+                        title="Download seluruh titik GPS ke file KML Google Earth">
+                        <i class="fa-solid fa-cloud-arrow-down text-emerald-600 text-xs"></i>
+                        <span class="hidden md:inline">Download KML Google Earth</span>
+                        <span class="md:hidden">KML</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
     <!-- Main Content -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-        <!-- Stat Cards (Ringkasan Berkas Evident) -->
+        <!-- VIEW 1: BERKAS EVIDENT ODC, ODP, TIANG, MODEM -->
+        <div id="evidentView" class="space-y-6">
+
+            <!-- Stat Cards (Ringkasan Berkas Evident) -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
                 <div>
@@ -418,6 +456,157 @@
                 </table>
             </div>
         </section>
+        </div><!-- End of #evidentView -->
+
+        <!-- VIEW 2: DASHBOARD PETA KML & GIS LAPANGAN (GOOGLE EARTH ONLINE & NAVIGASI GPS) -->
+        <div id="kmlView" class="hidden space-y-6">
+
+            <!-- Stat Cards Khusus KML & GIS -->
+            <section class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div class="bg-white rounded-xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Total Titik GPS</p>
+                        <p class="text-xl sm:text-2xl font-black text-slate-900 mt-0.5" id="kmlStatTotal">0</p>
+                        <span class="text-[9.5px] text-slate-400">Semua Aset Terpetakan</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shadow-2xs">
+                        <i class="fa-solid fa-map-location-dot"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-4 border border-blue-200/80 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[10.5px] font-bold uppercase tracking-wider text-blue-600">Perangkat ODC</p>
+                        <p class="text-xl sm:text-2xl font-black text-blue-800 mt-0.5" id="kmlStatOdc">0</p>
+                        <span class="text-[9.5px] text-blue-500">Induk Jaringan</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-lg shadow-2xs">
+                        <i class="fa-solid fa-server"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-4 border border-green-200/80 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[10.5px] font-bold uppercase tracking-wider text-green-600">Perangkat ODP</p>
+                        <p class="text-xl sm:text-2xl font-black text-green-800 mt-0.5" id="kmlStatOdp">0</p>
+                        <span class="text-[9.5px] text-green-500">Titik Distribusi</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center text-lg shadow-2xs">
+                        <i class="fa-solid fa-network-wired"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-4 border border-amber-200/80 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[10.5px] font-bold uppercase tracking-wider text-amber-600">Tiang Fiber Optik</p>
+                        <p class="text-xl sm:text-2xl font-black text-amber-800 mt-0.5" id="kmlStatTiang">0</p>
+                        <span class="text-[9.5px] text-amber-500">Radius &gt; 30m</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-lg shadow-2xs">
+                        <i class="fa-solid fa-tower-broadcast"></i>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Container Peta Interaktif & Panel Kontrol -->
+            <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
+                <!-- Toolbar Peta -->
+                <div class="p-3 sm:p-4 border-b border-slate-200/80 bg-slate-50/50 space-y-3">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <!-- Judul & Keterangan Mode Peta -->
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm shadow-xs">
+                                <i class="fa-solid fa-earth-asia"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                                    <span>Peta Sebaran KML &amp; Navigasi GIS Lapangan</span>
+                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Online Realtime</span>
+                                </h3>
+                                <p class="text-[10.5px] text-slate-500">Klik titik untuk melihat foto, info perangkat, dan langsung navigasi rute Google Maps di HP.</p>
+                            </div>
+                        </div>
+
+                        <!-- Action Toolbar: Download KML & GPS Saya -->
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button type="button" onclick="locateUserPosition()" id="btnLocateUser"
+                                class="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                title="Deteksi lokasi GPS saya saat ini di peta">
+                                <i class="fa-solid fa-crosshairs text-blue-600 text-xs"></i>
+                                <span>Lokasi Saya (GPS HP)</span>
+                            </button>
+
+                            <button type="button" onclick="toggleMapBasemap()" id="btnToggleBasemap"
+                                class="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                title="Ganti mode peta Jalan / Citra Satelit">
+                                <i class="fa-solid fa-layer-group text-slate-500 text-xs"></i>
+                                <span id="basemapLabel">Mode Satelit</span>
+                            </button>
+
+                            <button type="button" onclick="exportKmlFile()"
+                                class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs shadow-emerald-600/30 cursor-pointer"
+                                title="Download berkas .KML lengkap untuk dibuka di Google Earth Pro / HP">
+                                <i class="fa-solid fa-download text-xs"></i>
+                                <span>Export KML Google Earth</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter Kategori & Kotak Pencarian Titik Peta -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-200/60">
+                        <!-- Filter Layer Chips -->
+                        <div class="flex items-center gap-1.5 flex-wrap" id="kmlLayerFilters">
+                            <button type="button" onclick="filterKmlLayer('all')" id="btnLayerAll"
+                                class="kml-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900 text-white shadow-2xs transition cursor-pointer">
+                                Semua Titik (<span id="countLayerAll">0</span>)
+                            </button>
+                            <button type="button" onclick="filterKmlLayer('ODC')" id="btnLayerOdc"
+                                class="kml-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition flex items-center gap-1 cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-blue-600 inline-block"></span>
+                                ODC (<span id="countLayerOdc">0</span>)
+                            </button>
+                            <button type="button" onclick="filterKmlLayer('ODP')" id="btnLayerOdp"
+                                class="kml-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 hover:bg-green-50 hover:text-green-700 transition flex items-center gap-1 cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-green-600 inline-block"></span>
+                                ODP (<span id="countLayerOdp">0</span>)
+                            </button>
+                            <button type="button" onclick="filterKmlLayer('TIANG')" id="btnLayerTiang"
+                                class="kml-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700 transition flex items-center gap-1 cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                                Tiang (<span id="countLayerTiang">0</span>)
+                            </button>
+                        </div>
+
+                        <!-- Search Box di Peta -->
+                        <div class="relative w-full sm:w-72">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" id="kmlSearchInput" oninput="searchKmlPoints(this.value)"
+                                placeholder="Cari tiang / ODP / ODC di peta..."
+                                class="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition">
+                            <button id="clearKmlSearchBtn" onclick="clearKmlSearch()"
+                                class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+                                title="Hapus pencarian peta">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Canvas Peta Interaktif Leaflet -->
+                <div class="relative w-full">
+                    <div id="kmlMapCanvas" class="w-full h-[520px] sm:h-[620px] bg-slate-100 z-10"></div>
+
+                    <!-- Overlay Legend Panduan Warna -->
+                    <div class="absolute bottom-4 left-4 z-20 bg-white/95 backdrop-blur-xs p-2.5 rounded-xl border border-slate-200/80 shadow-md text-[10.5px] space-y-1.5 pointer-events-auto">
+                        <span class="font-bold text-slate-700 block uppercase tracking-wider text-[9.5px]">Legenda Titik:</span>
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">ODC Induk</span></div>
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">ODP Jaringan</span></div>
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">Tiang Fiber Optik</span></div>
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 border border-white shadow-2xs animate-pulse"></span> <span class="font-semibold text-slate-700">Lokasi Anda (GPS)</span></div>
+                    </div>
+                </div>
+            </section>
+        </div><!-- End of #kmlView -->
     </main>
 
     <!-- Modal Share Access -->
@@ -661,8 +850,8 @@
     </div>
 
     <!-- Application JavaScript Scripts (Cache-Busted to Ensure Instant Update) -->
-    <script src="config.js?v=20261120_01"></script>
-    <script src="script.js?v=20261120_01"></script>
+    <script src="config.js?v=20261120_03"></script>
+    <script src="script.js?v=20261120_03"></script>
 </body>
 
 </html>
