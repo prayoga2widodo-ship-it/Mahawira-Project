@@ -637,5 +637,23 @@
     "deviceLabel": "ODC-SKD 02 [LABEL]",
     "date": "20/11/2026, 11.00.31",
     "fileName": "evident_ODC-SKD_02_[LABEL]_[H:2fc259f539460598][DH:071d8d0799e9f3fe]_1795147230999.jpg"
+  },
+  {
+    "sha256": "961ce83ba36c6fa97f93bd3c4c8d8661ff0b63579a65f24bbb4f08131d97cdc2",
+    "dhash": "0303c120a7676133",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 145280001 | Nama: SARONI | SN: ZTGEJKE1213111 [TAMPAK DEPAN]",
+    "date": "20/11/2026, 15.06.07",
+    "fileName": "evident_modem_ODP-SKD_01_01_ID_145280001_SN_ZTGEJKE1213111_[DEPAN]_[H:961ce83ba36c6fa9][DH:0303c120a7676133]_1795161966166.jpg"
+  },
+  {
+    "sha256": "1776a4e4cf6b21f25583720408417631dbdefc2e76a6699293f98d419fb2d90d",
+    "dhash": "37312705a262f2d3",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 145280001 | Nama: SARONI | SN: ZTGEJKE1213111 [TAMPAK BELAKANG]",
+    "date": "20/11/2026, 15.06.25",
+    "fileName": "evident_modem_ODP-SKD_01_01_ID_145280001_SN_ZTGEJKE1213111_[BELAKANG]_[H:1776a4e4cf6b21f2][DH:37312705a262f2d3]_1795161984738.jpg"
   }
 ]
