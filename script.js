@@ -1827,10 +1827,16 @@ function buildModemGroupedRow(groupKey, items, canEdit) {
     const odpItem   = items.find(it => it.odpName || extractOdpName(it)) || newest;
     const odpNama   = odpItem.odpName || extractOdpName(odpItem) || '-';
 
-    // Ambil Share Loc (URL lokasi GPS) dari item yang ada
-    const locItem = items.find(it => it.locationUrl) || items.find(it => it.latitude && it.longitude) || null;
+    // Ambil Share Loc (URL lokasi GPS) dari item yang ada di grup atau cari di sampleData
+    let locItem = items.find(it => it.locationUrl || (it.latitude && it.longitude));
+    if (!locItem && (snItem.modemSn || idItem.customerId)) {
+        locItem = sampleData.find(it =>
+            (snItem.modemSn && it.modemSn && it.modemSn.trim().toUpperCase() === snItem.modemSn.trim().toUpperCase() && (it.locationUrl || it.latitude)) ||
+            (idItem.customerId && it.customerId && it.customerId.trim().toUpperCase() === idItem.customerId.trim().toUpperCase() && (it.locationUrl || it.latitude))
+        );
+    }
     const locationUrl = locItem
-        ? (locItem.locationUrl || `https://www.google.com/maps?q=${locItem.latitude},${locItem.longitude}`)
+        ? (locItem.locationUrl || (locItem.latitude && locItem.longitude ? `https://www.google.com/maps?q=${locItem.latitude},${locItem.longitude}` : null))
         : null;
 
     const modemSn      = snItem.modemSn    || '-';
@@ -1931,11 +1937,11 @@ function buildModemGroupedRow(groupKey, items, canEdit) {
                          <i class="fa-solid fa-location-dot text-emerald-600 text-[11px]"></i>
                          <span class="text-[9px]">Maps</span>
                       </a>
-                      ${canEdit ? `<button onclick="setModemLocation('${escapeHtml(groupKey)}', '${escapeHtml(locationUrl)}')"
-                         class="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-100 rounded text-[9px] transition"
+                      ${canEdit ? `<button onclick="setModemLocation('${escapeHtml(groupKey)}', [${allIds.join(',')}], '${escapeHtml(locationUrl)}')"
+                         class="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-100 rounded text-[9px] transition cursor-pointer"
                          title="Ubah Titik Lokasi GPS Modem"><i class="fa-solid fa-pen"></i></button>` : ''}
                    </div>`
-                : `<button onclick="${canEdit ? `setModemLocation('${escapeHtml(groupKey)}')` : `alert('Lokasi GPS untuk modem ini belum dibagikan.')`}"
+                : `<button onclick="${canEdit ? `setModemLocation('${escapeHtml(groupKey)}', [${allIds.join(',')}])` : `alert('Lokasi GPS untuk modem ini belum dibagikan.')`}"
                       class="inline-flex flex-col items-center justify-center gap-0.5 px-1.5 py-1.5 ${canEdit ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer shadow-xs' : 'bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed opacity-75'} rounded-lg text-[9px] font-semibold w-full max-w-[65px] mx-auto"
                       title="${canEdit ? 'Klik untuk Atur Titik Lokasi GPS Modem' : 'GPS belum dibagikan'}">
                       <i class="fa-solid ${canEdit ? 'fa-location-crosshairs text-amber-600' : 'fa-location-dot text-slate-300'} text-[11px]"></i>
@@ -1979,32 +1985,49 @@ async function deleteModemGroup(groupKey, ids) {
 }
 
 // Set / Update Share Loc GPS untuk grup Modem
-async function setModemLocation(groupKey, existingUrl = '') {
-    const newUrl = prompt(
-        `📍 Masukkan URL Share Lokasi GPS untuk Modem:\n"${groupKey}"\n\nContoh: https://maps.google.com/?q=-7.123456,110.123456\n(Kosongkan untuk menghapus)`,
-        existingUrl || ''
-    );
+async function setModemLocation(groupKey, targetIds = [], existingUrl = '') {
+    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') {
+        return alert('Akses ditolak: Hanya Owner dan Editor yang dapat mengatur lokasi.');
+    }
 
-    if (newUrl === null) return; // Dibatalkan
+    if (typeof targetIds === 'string') {
+        existingUrl = targetIds;
+        targetIds = [];
+    }
+
+    const currentVal = existingUrl && existingUrl !== 'null' ? existingUrl : '';
+    const cleanLabel = (groupKey || '').replace(/^(SN|ID|FILE):/, '');
+    const promptMsg = currentVal
+        ? `Ubah Titik Lokasi GPS / Google Maps untuk Modem "${cleanLabel}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`
+        : `Atur Titik Lokasi GPS / Google Maps untuk Modem "${cleanLabel}":\n\nMasukkan link Google Maps atau Koordinat (contoh: -6.1234, 106.1234):`;
+
+    const input = prompt(promptMsg, currentVal);
+    if (input === null) return; // Dibatalkan
+
+    const trimmed = input.trim();
+    if (!trimmed && currentVal) {
+        if (!confirm(`Hapus titik lokasi GPS untuk Modem "${cleanLabel}"?`)) return;
+    }
 
     let lat = null;
     let lng = null;
-    let finalUrl = newUrl.trim();
+    let finalUrl = trimmed;
 
-    if (finalUrl) {
-        // Ekstrak koordinat dari URL Google Maps / koordinat langsung
-        const coordMatch = finalUrl.match(/([-+]?\d{1,2}\.\d+)[,\s]+([-+]?\d{1,3}\.\d+)/);
-        if (coordMatch) {
-            lat = parseFloat(coordMatch[1]);
-            lng = parseFloat(coordMatch[2]);
-        }
-        // Pastikan URL valid — jika hanya koordinat saja (tanpa http), jadikan URL Google Maps
-        if (!finalUrl.startsWith('http')) {
-            if (lat && lng) {
-                finalUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-            } else {
-                alert('⚠️ Format URL tidak valid. Masukkan URL Google Maps atau koordinat lat,lng.');
-                return;
+    if (trimmed) {
+        const mCoord = trimmed.match(/^([-+]?[0-9]*\.?[0-9]+)[\s,]+([-+]?[0-9]*\.?[0-9]+)$/);
+        if (mCoord) {
+            lat = parseFloat(mCoord[1]);
+            lng = parseFloat(mCoord[2]);
+            finalUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        } else {
+            const matchInUrl = trimmed.match(/[-+]?([1-8]?\d(?:\.\d+)?|90(?:\.0+)?),\s*[-+]?(?:180(?:\.0+)?|(?:(?:1[0-7]\d)|(?:[1-9]?\d))(?:\.\d+)?)/);
+            if (matchInUrl) {
+                const parts = matchInUrl[0].split(',');
+                lat = parseFloat(parts[0].trim());
+                lng = parseFloat(parts[1].trim());
+            }
+            if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+                finalUrl = `https://${trimmed}`;
             }
         }
     } else {
@@ -2020,67 +2043,44 @@ async function setModemLocation(groupKey, existingUrl = '') {
         payload.longitude = null;
     }
 
-    // Kumpulkan semua item ID yang termasuk dalam grup modem ini
-    const matchedItems = sampleData.filter(item => {
-        if (!item.modemSn && !item.customerId && !item.name) return false;
-        if (groupKey.startsWith('SN:')) {
-            const snKey = groupKey.slice(3); // hapus "SN:" dari depan
-            return (item.modemSn || '').trim().toUpperCase() === snKey;
+    const idsToUpdate = Array.isArray(targetIds) && targetIds.length > 0 ? [...targetIds] : [];
+    const normKey = cleanLabel.trim().toUpperCase();
+
+    sampleData.forEach(item => {
+        const sn = (item.modemSn || '').trim().toUpperCase();
+        const cid = (item.customerId || '').trim().toUpperCase();
+        const nm = (item.name || '').trim().toUpperCase();
+        const lbl = (item.deviceLabel || '').trim().toUpperCase();
+        if (idsToUpdate.includes(item.id) || (normKey && (sn === normKey || cid === normKey || nm.includes(normKey) || lbl.includes(normKey)))) {
+            item.locationUrl = finalUrl;
+            item.latitude = lat;
+            item.longitude = lng;
+            if (item.id && !idsToUpdate.includes(item.id)) idsToUpdate.push(item.id);
         }
-        if (groupKey.startsWith('ID:')) {
-            const idKey = groupKey.slice(3); // hapus "ID:" dari depan
-            return (item.customerId || '').trim().toUpperCase() === idKey;
-        }
-        if (groupKey.startsWith('FILE:')) {
-            const fileKey = groupKey.slice(5);
-            return (item.name || '').trim().toUpperCase() === fileKey;
-        }
-        return false;
     });
 
-    if (matchedItems.length === 0) {
-        alert('⚠️ Tidak ada data modem yang cocok untuk diperbarui. Coba refresh halaman terlebih dahulu.');
-        return;
-    }
+    try {
+        localStorage.setItem('evident_cached_vault', JSON.stringify(sampleData));
+    } catch (e) {}
 
-    // Update sampleData lokal terlebih dahulu agar tampilan langsung berubah
-    matchedItems.forEach(item => {
-        item.locationUrl = finalUrl;
-        item.latitude = lat;
-        item.longitude = lng;
-    });
-
-    // Update ke Supabase per ID (cara paling andal — tidak tergantung kecocokan kolom lain)
-    const matchedIds = matchedItems.map(it => it.id).filter(Boolean);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const itemId of matchedIds) {
-        try {
-            const { error } = await supabaseClient
-                .from('evidents')
-                .update(payload)
-                .eq('id', itemId)
-                .select();  // .select() penting agar Supabase JS v2 benar-benar menjalankan query
-            if (error) {
-                console.error(`Gagal update ID ${itemId}:`, error);
-                failCount++;
-            } else {
-                successCount++;
-            }
-        } catch (e) {
-            console.error(`Error update ID ${itemId}:`, e);
-            failCount++;
+    try {
+        if (idsToUpdate.length > 0) {
+            await supabaseClient.from('evidents').update(payload).in('id', idsToUpdate);
         }
-    }
-
-    if (failCount === 0) {
-        alert(`✅ Share Loc GPS Modem "${groupKey}" berhasil ${finalUrl ? `disimpan (${successCount} record)` : 'dihapus'}!\n📍 Koordinat: ${lat ? `${lat}, ${lng}` : '-'}`);
-    } else {
-        alert(`⚠️ Sebagian berhasil: ${successCount} tersimpan, ${failCount} gagal.\nCoba refresh halaman lalu ulangi.`);
+        if (cleanLabel) {
+            await supabaseClient.from('evidents').update(payload).ilike('device_label', `%${cleanLabel}%`);
+            await supabaseClient.from('evidents').update(payload).eq('modem_sn', cleanLabel);
+            await supabaseClient.from('evidents').update(payload).eq('customer_id', cleanLabel);
+        }
+        alert(`✅ Titik lokasi GPS untuk Modem "${cleanLabel}" berhasil disimpan!`);
+    } catch (err) {
+        console.error("Gagal update lokasi Modem ke Supabase:", err);
+        alert("Gagal simpan ke database: " + (err.message || err));
     }
 
     filterFiles();
+    if (typeof updateKmlStats === 'function') updateKmlStats();
+    if (typeof renderKmlPoints === 'function' && kmlLeafletMap) renderKmlPoints();
 }
 
 window.setModemLocation = setModemLocation;
@@ -3192,10 +3192,23 @@ function buildRow(item, canEdit, isOdcHeader = false, isChild = false) {
                  <i class="fa-solid fa-barcode text-[8.5px]"></i> View Belakang
                </span>`;
 
+        const modemLocUrl = item.locationUrl || (pair.front && pair.front.locationUrl) || (pair.back && pair.back.locationUrl) || (item.latitude && item.longitude ? `https://www.google.com/maps?q=${item.latitude},${item.longitude}` : null);
+        const relatedIds = [item.id, pair.front ? pair.front.id : null, pair.back ? pair.back.id : null].filter(Boolean);
+        const modemLocHtml = modemLocUrl
+            ? `<a href="${modemLocUrl}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md font-bold text-[10px] transition shadow-2xs whitespace-nowrap" title="Buka Share Loc GPS Modem (Google Maps)">
+                 <i class="fa-solid fa-location-dot text-[9px] text-emerald-600"></i>
+                 <span>Maps</span>
+               </a>`
+            : (canEdit ? `<button onclick="setModemLocation('${escapeHtml(item.modemSn || item.customerId || item.name)}', [${relatedIds.join(',')}])" class="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 rounded-md font-bold text-[9.5px] transition shadow-2xs whitespace-nowrap cursor-pointer" title="Tambah Titik GPS Modem">
+                 <i class="fa-solid fa-location-crosshairs text-[9px] text-amber-600"></i>
+                 <span>+ Loc</span>
+               </button>` : '');
+
         pairedButtonsHtml = `
             <div class="inline-flex items-center gap-1.5 flex-nowrap">
                 ${frontHtml}
                 ${backHtml}
+                ${modemLocHtml}
             </div>
         `;
     } else if (pair.type === 'odc_odp') {

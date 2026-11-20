@@ -1490,28 +1490,31 @@ async function startModemFlow(ctx, initialOdpText = null) {
     session.modemSn = null;
     session.photoType = null;
     session.pendingPhoto = null;
+    session.latitude = null;
+    session.longitude = null;
+    session.locationUrl = null;
     session.completedTypes = [];
 
     if (initialOdpText) {
         return handleModemOdpInput(ctx, initialOdpText);
     }
 
-    session.step = 'waiting_modem_odp';
+    // SOP: Saat memilih menu MODEM, langsung minta Share Loc GPS terlebih dahulu
+    session.step = 'waiting_modem_location';
 
     await ctx.reply(
         `💻 *INPUT DATA EVIDENT MODEM PELANGGAN*\n\n` +
-        `👉 *Langkah 1/6: Silakan masukkan LABEL ODP tempat modem tersambung:*\n` +
-        `📌 *Format Wajib:* \`ODP-(WILAYAH) (NO_ODC)/(NO_ODP)\`\n` +
-        `💡 *Contoh Penulisan:*\n` +
-        `• \`ODP-SKD 01/01\`\n` +
-        `• \`ODP-SKD 01/08\`\n` +
-        `• \`ODP-WNJ 01/01\`\n\n` +
-        `_(Ketik /batal untuk membatalkan)_`,
+        `📍 *LANGKAH 1/6: SILAKAN BAGIKAN SHARE LOC GPS PELANGGAN!*\n\n` +
+        `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
+        `Setiap pemasangan modem pelanggan wajib disertai titik lokasi GPS (Share Loc).\n\n` +
+        `👉 *Tekan tombol "📍 Kirim Share Loc Modem" di bawah sekarang:*\n` +
+        `_(Atau pilih "⏭ Lewati (Skip) Share Loc" jika GPS belum dapat diambil saat ini)_`,
         {
             parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('❌ Batal', 'action_cancel')]
-            ])
+            ...Markup.keyboard([
+                [Markup.button.locationRequest('📍 Kirim Share Loc Modem')],
+                ['⏭ Lewati (Skip) Share Loc', '❌ Batalkan Sesi']
+            ]).resize()
         }
     );
 }
@@ -1697,9 +1700,33 @@ bot.hears(['❌ Batalkan Sesi', 'Batal', 'batal', 'cancel'], (ctx) => {
 });
 
 // Handler SKIP Share Loc Modem (tombol ⏭ Lewati)
-bot.hears(['⏭ Lewati (Skip) Share Loc'], async (ctx) => {
+bot.hears(['⏭ Lewati (Skip) Share Loc', 'Lewati', 'skip', 'Skip'], async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
+    
+    // Jika lewati saat di langkah awal (sebelum input ODP)
+    if (session.category === 'MODEM' && session.step === 'waiting_modem_location') {
+        session.latitude = null;
+        session.longitude = null;
+        session.locationUrl = null;
+        session.step = 'waiting_modem_odp';
+
+        return ctx.reply(
+            `⚠️ *Share Loc Dilewati.* Anda dapat menambahkan koordinat GPS nanti di Web Dashboard.\n\n` +
+            `👉 *Langkah 2/6: Silakan masukkan LABEL ODP tempat modem tersambung:*\n` +
+            `📌 *Format Wajib:* \`ODP-(WILAYAH) (NO_ODC)/(NO_ODP)\`\n` +
+            `💡 *Contoh Penulisan:* \`ODP-SKD 01/01\`\n\n` +
+            `_(Ketik label ODP sekarang)_`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.removeKeyboard(),
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Batal', 'action_cancel')]
+                ])
+            }
+        );
+    }
+
     if (session.step === 'waiting_modem_shareloc' && session.category === 'MODEM') {
         const odpRef = session.odpReference || '-';
         const odcCat = session.odcReference || session.category;
@@ -1718,6 +1745,7 @@ bot.hears(['⏭ Lewati (Skip) Share Loc'], async (ctx) => {
             `👇 *Pilih menu berikutnya:*`,
             {
                 parse_mode: 'Markdown',
+                ...Markup.removeKeyboard(),
                 ...Markup.inlineKeyboard([
                     [Markup.button.callback('💻 Input Modem Lain', 'start_modem')],
                     [Markup.button.callback('📤 Upload Kategori Lain', 'action_open_upload')],
@@ -2289,8 +2317,8 @@ bot.on('text', async (ctx, next) => {
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
 
-    // KASUS A-MODEM: Menunggu input Label ODP untuk Modem
-    if (session.step === 'waiting_modem_odp' && session.category === 'MODEM') {
+    // KASUS A-MODEM: Menunggu input Label ODP untuk Modem (atau jika teknisi langsung ketik ODP saat share loc)
+    if ((session.step === 'waiting_modem_odp' || session.step === 'waiting_modem_location') && session.category === 'MODEM') {
         return handleModemOdpInput(ctx, text);
     }
 
@@ -2900,12 +2928,39 @@ bot.on('location', async (ctx) => {
         );
     }
 
-    // KASUS MODEM: Tangani Share Loc setelah kedua foto selesai diupload
-    if (session.category === 'MODEM' && session.step === 'waiting_modem_shareloc') {
+    // KASUS MODEM: Tangani Share Loc (bisa di langkah 1/awal atau di langkah akhir)
+    if (session.category === 'MODEM') {
         const loc = ctx.message.location;
         const lat = loc.latitude;
         const lng = loc.longitude;
         const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+
+        session.latitude = lat;
+        session.longitude = lng;
+        session.locationUrl = mapsUrl;
+
+        // Jika lokasi dikirim di langkah 1 (waiting_modem_location):
+        if (session.step === 'waiting_modem_location') {
+            session.step = 'waiting_modem_odp';
+            return ctx.reply(
+                `✅ *LOKASI GPS MODEM BERHASIL DITERIMA & DICATAT!*\n\n` +
+                `📍 *Koordinat:* \`${lat}, ${lng}\`\n` +
+                `🗺 *Google Maps:* [Buka Peta Lokasi](${mapsUrl})\n\n` +
+                `👉 *Langkah 2/6: Silakan masukkan LABEL ODP tempat modem tersambung:*\n` +
+                `📌 *Format Wajib:* \`ODP-(WILAYAH) (NO_ODC)/(NO_ODP)\`\n` +
+                `💡 *Contoh Penulisan:* \`ODP-SKD 01/01\`\n\n` +
+                `_(Ketik label ODP sekarang)_`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.removeKeyboard(),
+                    ...Markup.inlineKeyboard([
+                        [Markup.button.callback('❌ Batal', 'action_cancel')]
+                    ])
+                }
+            );
+        }
+
+        // Jika lokasi dikirim di akhir atau konfirmasi:
         const cId   = session.customerId || '-';
         const cName = session.customerName || '-';
         const sn    = session.modemSn || '-';
@@ -2913,50 +2968,16 @@ bot.on('location', async (ctx) => {
         const odcCat = session.odcReference || session.category;
 
         // Update semua record modem ini di Supabase dengan koordinat GPS
-        // Strategi: Update berdasarkan modem_sn TERLEBIH DAHULU (paling andal)
-        // lalu fallback ke customer_id jika modem_sn kosong
         try {
             const updatePayload = { location_url: mapsUrl, latitude: lat, longitude: lng };
-            let updated = false;
-
             if (sn !== '-') {
-                const { error: snErr, data: snData } = await supabase
-                    .from('evidents')
-                    .update(updatePayload)
-                    .eq('modem_sn', sn)
-                    .select('id');
-                if (!snErr && snData && snData.length > 0) {
-                    updated = true;
-                    console.log(`Share Loc Modem [${sn}] tersimpan: ${snData.length} record diperbarui.`);
-                } else if (snErr) {
-                    console.error('Error update by modem_sn:', snErr.message);
-                }
+                await supabase.from('evidents').update(updatePayload).eq('modem_sn', sn);
             }
-
-            // Fallback: update berdasarkan device_label jika modem_sn tidak match
-            if (!updated && odcCat && odcCat !== '-') {
-                const deviceLabelPattern = `%MODEM%${odpRef}%${cId}%`;
-                const { error: lblErr, data: lblData } = await supabase
-                    .from('evidents')
-                    .update(updatePayload)
-                    .ilike('device_label', deviceLabelPattern)
-                    .select('id');
-                if (!lblErr && lblData && lblData.length > 0) {
-                    updated = true;
-                    console.log(`Share Loc Modem [label] tersimpan: ${lblData.length} record diperbarui.`);
-                }
+            if (cId !== '-') {
+                await supabase.from('evidents').update(updatePayload).eq('customer_id', cId);
             }
-
-            // Fallback terakhir: update berdasarkan customer_id
-            if (!updated && cId !== '-') {
-                const { error: cidErr, data: cidData } = await supabase
-                    .from('evidents')
-                    .update(updatePayload)
-                    .eq('customer_id', cId)
-                    .select('id');
-                if (!cidErr && cidData && cidData.length > 0) {
-                    console.log(`Share Loc Modem [customer_id] tersimpan: ${cidData.length} record diperbarui.`);
-                }
+            if (odpRef !== '-') {
+                await supabase.from('evidents').update(updatePayload).ilike('device_label', `%MODEM%${odpRef}%`);
             }
         } catch (updateErr) {
             console.error('Gagal simpan share loc modem ke Supabase:', updateErr);
@@ -2976,6 +2997,7 @@ bot.on('location', async (ctx) => {
             `👇 *Pilih menu berikutnya:*`,
             {
                 parse_mode: 'Markdown',
+                ...Markup.removeKeyboard(),
                 ...Markup.inlineKeyboard([
                     [Markup.button.callback('💻 Input Modem Lain', 'start_modem')],
                     [Markup.button.callback('📤 Upload Kategori Lain', 'action_open_upload')],
@@ -3715,6 +3737,10 @@ bot.on(['photo', 'document'], async (ctx) => {
                 customerName: cName,
                 modemSn: sn,
                 odcReference: odcCat,
+                odpReference: odpRef,
+                latitude: session.latitude || null,
+                longitude: session.longitude || null,
+                locationUrl: session.locationUrl || null,
                 uploader: uploaderTag,
                 fileUrl: fileUrl,
                 fileBuffer: fileBuffer,
@@ -3759,6 +3785,10 @@ bot.on(['photo', 'document'], async (ctx) => {
                 customerName: cName,
                 modemSn: sn,
                 odcReference: odcCat,
+                odpReference: odpRef,
+                latitude: session.latitude || null,
+                longitude: session.longitude || null,
+                locationUrl: session.locationUrl || null,
                 uploader: uploaderTag,
                 fileUrl: fileUrl,
                 fileBuffer: fileBuffer,
@@ -3767,6 +3797,37 @@ bot.on(['photo', 'document'], async (ctx) => {
                 dhash: dHash
             });
 
+            // Jika lokasi GPS SUDAH ADA (karena sudah dikirim di langkah awal)
+            if (session.locationUrl) {
+                await ctx.reply(
+                    `🎉 *UPLOAD EVIDENT MODEM SELESAI (LENGKAP DENGAN SHARE LOC GPS)!*\n\n` +
+                    `📋 *Rincian Lengkap Evident Pelanggan:*\n` +
+                    `• 🏷 *Label ODP:* \`${odpRef}\`\n` +
+                    `• 🔗 *Induk ODC:* \`${odcCat}\`\n` +
+                    `• 🆔 *ID Pelanggan:* \`${cId}\`\n` +
+                    `• 👤 *Nama Pelanggan:* \`${cName}\`\n` +
+                    `• 📟 *SN Modem:* \`${sn}\`\n` +
+                    `• 📍 *Koordinat GPS:* \`${session.latitude}, ${session.longitude}\`\n` +
+                    `• 🗺 *Google Maps:* [Buka Peta Lokasi](${session.locationUrl})\n` +
+                    `• 📷 *Foto 1:* Tampak Depan (Tersimpan)\n` +
+                    `• 📷 *Foto 2:* Tampak Belakang & SN Jelas (Tersimpan)\n\n` +
+                    `📂 *Seluruh data evident modem dan titik GPS telah tersimpan di Web Dashboard.*\n\n` +
+                    `👇 *Pilih menu berikutnya:*`,
+                    {
+                        parse_mode: 'Markdown',
+                        ...Markup.removeKeyboard(),
+                        ...Markup.inlineKeyboard([
+                            [Markup.button.callback('💻 Input Modem Lain', 'start_modem')],
+                            [Markup.button.callback('📤 Upload Kategori Lain', 'action_open_upload')],
+                            [Markup.button.callback('📊 Cek Status', 'action_open_status')]
+                        ])
+                    }
+                );
+                clearSession(chatId);
+                return;
+            }
+
+            // Jika lokasi GPS belum ada (misal dilewati di langkah awal)
             await ctx.reply(
                 `🎉 *UPLOAD EVIDENT MODEM SELESAI (2/2 FOTO LENGKAP)!*\n\n` +
                 `📋 *Rincian Evident Pelanggan:*\n` +
@@ -3778,8 +3839,8 @@ bot.on(['photo', 'document'], async (ctx) => {
                 `• 📷 *Foto 1:* Tampak Depan (Tersimpan)\n` +
                 `• 📷 *Foto 2:* Tampak Belakang & SN Jelas (Tersimpan)\n\n` +
                 `📂 *Kedua evident foto modem otomatis masuk ke folder \`${odcCat}\` di Web Dashboard.*\n\n` +
-                `📍 *LANGKAH TERAKHIR: SHARE LOKASI GPS MODEM*\n` +
-                `Silakan kirimkan titik lokasi (Share Loc) rumah/instalasi pelanggan agar tercatat di peta.\n\n` +
+                `📍 *MOHON BAGIKAN SHARE LOC GPS MODEM PELANGGAN:*\n` +
+                `Silakan kirimkan titik lokasi GPS rumah/instalasi pelanggan agar tercatat di peta.\n\n` +
                 `👇 Tekan tombol **📍 Kirim Share Loc Modem** di bawah:`,
                 {
                     parse_mode: 'Markdown',
