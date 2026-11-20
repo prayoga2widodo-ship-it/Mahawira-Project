@@ -2449,14 +2449,15 @@ async function setOdcLocation(odcName, existingUrl = '') {
 
 // =====================================================================
 // RENDER TABLE TIANG: Khusus folder TIANG → 1 baris per unit Tiang dengan
-// kolom: LABEL TIANG | VIEW EVIDENT | SHARE LOC | PENGUNGGAH | TANGGAL & WAKTU | AKSI
+// kolom: FILE TIANG | LABEL TIANG | VIEW EVIDENT | SHARE LOC | PENGUNGGAH | TANGGAL & WAKTU | AKSI
 // =====================================================================
 function setTiangTableHeader() {
     const thead = document.getElementById('fileTableHead');
     if (!thead) return;
     thead.innerHTML = `
         <tr class="bg-amber-50/80 border-b border-amber-200/80 text-amber-800 text-[10.5px] font-bold uppercase tracking-wider">
-            <th class="py-2.5 px-3 min-w-[140px]"><i class="fa-solid fa-tower-broadcast mr-1 text-amber-600"></i>Label Tiang</th>
+            <th class="py-2.5 px-3 min-w-[150px]"><i class="fa-solid fa-file-image mr-1 text-amber-600"></i>File Tiang</th>
+            <th class="py-2.5 px-3 min-w-[130px]"><i class="fa-solid fa-tower-broadcast mr-1 text-amber-600"></i>Label Tiang</th>
             <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-image mr-1 text-blue-500"></i>View Evident</th>
             <th class="py-2.5 px-3 text-center"><i class="fa-solid fa-location-dot mr-1 text-emerald-500"></i>Share Loc</th>
             <th class="py-2.5 px-3"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah</th>
@@ -2469,18 +2470,26 @@ function setTiangTableHeader() {
 function buildTiangGroupedRow(tiangLabel, items, canEdit) {
     const newest = items.reduce((a, b) => ((a.id || 0) > (b.id || 0) ? a : b), items[0] || {});
 
-    // Label Tiang
-    const labelCell = `
+    // 1. File Tiang (Nama Berkas Evident)
+    const fileNameCell = `
         <div class="flex flex-col gap-0.5">
-            <span class="inline-flex items-center gap-1.5 font-bold text-amber-800 text-[11px]">
-                <i class="fa-solid fa-tower-broadcast text-amber-600 text-[10px]"></i>
-                ${escapeHtml(tiangLabel)}
-            </span>
-            ${items.length > 1 ? `<span class="text-[9.5px] text-slate-400 font-medium">${items.length} foto evident</span>` : ''}
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-700 font-mono truncate max-w-[210px]" title="${escapeHtml(newest.name || '-')}">
+                <i class="fa-solid fa-file-image text-amber-500 text-[10px] shrink-0"></i>
+                <span class="truncate">${escapeHtml(newest.name || 'evident_tiang.jpg')}</span>
+            </div>
+            ${items.length > 1 ? `<span class="text-[9.5px] text-slate-400 font-sans font-medium">${items.length} berkas evident tersimpan</span>` : ''}
         </div>
     `;
 
-    // View Evident
+    // 2. Label Tiang
+    const labelCell = `
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100/90 border border-amber-300 rounded-lg text-amber-900 font-bold text-[11px] whitespace-nowrap shadow-2xs">
+            <i class="fa-solid fa-tower-broadcast text-amber-700 text-[10px]"></i>
+            ${escapeHtml(tiangLabel)}
+        </span>
+    `;
+
+    // 3. View Evident
     let viewEvidentCell = '';
     if (items.length === 1) {
         viewEvidentCell = `
@@ -2506,7 +2515,7 @@ function buildTiangGroupedRow(tiangLabel, items, canEdit) {
         `;
     }
 
-    // Share Loc
+    // 4. Share Loc
     const locItem = items.find(it => it.locationUrl) || items.find(it => it.latitude && it.longitude) || null;
     const locationUrl = locItem ? (locItem.locationUrl || `https://www.google.com/maps?q=${locItem.latitude},${locItem.longitude}`) : null;
 
@@ -2532,13 +2541,13 @@ function buildTiangGroupedRow(tiangLabel, items, canEdit) {
               <span>${canEdit ? '+ Loc' : '-'}</span>
            </button>`;
 
-    // Pengunggah
+    // 5. Pengunggah
     const uploaderCell = `<span class="font-medium text-slate-700 text-[10.5px]">${escapeHtml(newest.uploader || '-')}</span>`;
 
-    // Tanggal dan Waktu
+    // 6. Tanggal dan Waktu
     const dateCell = `<span class="text-slate-400 text-[10.5px]">${escapeHtml(newest.date || '-')}</span>`;
 
-    // Aksi (Owner can delete, Editor/Viewer can preview)
+    // 7. Aksi (Owner can delete, Editor/Viewer can preview)
     const isOwner = checkIsOwner();
     const allIds = items.map(it => it.id).filter(Boolean);
     const deleteGroupBtn = isOwner && allIds.length > 0
@@ -2553,6 +2562,7 @@ function buildTiangGroupedRow(tiangLabel, items, canEdit) {
     const tr = document.createElement('tr');
     tr.className = 'bg-amber-50/30 hover:bg-amber-50/60 border-b border-amber-100 transition';
     tr.innerHTML = `
+        <td class="py-2.5 px-3">${fileNameCell}</td>
         <td class="py-2.5 px-3">${labelCell}</td>
         <td class="py-2.5 px-3 text-center">
             <div class="flex justify-center w-full max-w-[120px] mx-auto">${viewEvidentCell}</div>
@@ -2857,7 +2867,7 @@ function renderTable(data, isSearchMode = false) {
         if (!tiangData || tiangData.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="py-10 text-center text-slate-400">
+                    <td colspan="7" class="py-10 text-center text-slate-400">
                         <i class="fa-solid fa-tower-broadcast text-2xl text-slate-300 mb-1.5 block"></i>
                         <p class="font-medium text-xs">Belum ada berkas evident Tiang yang tersimpan.</p>
                     </td>
@@ -3015,6 +3025,8 @@ function buildRow(item, canEdit, isOdcHeader = false, isChild = false) {
             labelBadge = `<span class="font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded text-[10.5px] mr-1">${escapeHtml(item.deviceLabel)}</span>`;
         } else if (isModemItem) {
             labelBadge = `<span class="font-bold text-cyan-800 bg-cyan-100/80 border border-cyan-200 px-1.5 py-0.5 rounded text-[10.5px] mr-1"><i class="fa-solid fa-house-signal text-[8.5px] mr-1"></i>${escapeHtml(item.deviceLabel)}</span>`;
+        } else if (item.category === 'TIANG' || item.deviceLabel.startsWith('TIANG') || item.deviceLabel.startsWith('T.')) {
+            labelBadge = `<span class="font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-1.5 py-0.5 rounded text-[10.5px] mr-1 shadow-2xs"><i class="fa-solid fa-tower-broadcast text-[8.5px] text-amber-700 mr-1"></i>${escapeHtml(item.deviceLabel)}</span>`;
         } else {
             labelBadge = `<span class="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10.5px] mr-1">${escapeHtml(item.deviceLabel)}</span>`;
         }

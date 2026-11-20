@@ -1464,8 +1464,12 @@ async function startTiangFlow(ctx) {
         `Setiap evident tiang wajib memiliki **Label Tiang**, **Foto Evident**, dan **Share Loc GPS** (berjarak > 30 meter antar tiang).\n\n` +
         `👉 *Langkah 1: Silakan ketikkan LABEL / NOMOR TIANG Anda sekarang:*\n` +
         `📌 *Format/Contoh:* \`TIANG-01\`, \`TIANG-SKD 01\`, \`TIANG-001\`, atau \`T.01\`\n\n` +
+        `⚠️ _Aksi foto dan shareloc akan dibuka setelah Label Tiang diinput._\n` +
         `_(Ketik /batal jika ingin membatalkan)_`,
-        { parse_mode: 'Markdown' }
+        {
+            parse_mode: 'Markdown',
+            ...Markup.removeKeyboard()
+        }
     );
 }
 
@@ -2271,7 +2275,20 @@ bot.on('text', async (ctx, next) => {
         } else {
             cleanLabel = `TIANG-${cleanLabel}`;
         }
-        session.deviceLabel = cleanLabel.toUpperCase();
+        cleanLabel = cleanLabel.toUpperCase();
+
+        if (cleanLabel === 'TIANG-' || cleanLabel === 'TIANG' || cleanLabel.length <= 6) {
+            return ctx.reply(
+                `⚠️ *LABEL TIANG BELUM LENGKAP / TIDAK VALID!*\n\n` +
+                `Input: \`${rawLabel}\`\n\n` +
+                `Sesuai SOP, silakan ketikkan label/nomor tiang yang spesifik.\n` +
+                `📌 *Contoh:* \`TIANG-01\`, \`TIANG-SKD 01\`, \`TIANG-001\`, atau \`T.01\`\n\n` +
+                `_(Ketik /batal jika ingin membatalkan)_`,
+                { parse_mode: 'Markdown' }
+            );
+        }
+
+        session.deviceLabel = cleanLabel;
 
         if (session.pendingPhotoRaw) {
             const raw = session.pendingPhotoRaw;
@@ -2774,9 +2791,12 @@ bot.on('text', async (ctx, next) => {
     }
 
     // 4. Jika teks mengandung kata TIANG atau diawali T.
+    if (/^(input|tambah|unggah)?\s*tiang$/i.test(text.trim()) || text.trim().toUpperCase() === 'TIANG') {
+        return startTiangFlow(ctx);
+    }
+
     if (text.toUpperCase().includes('TIANG') || /^T\.\d+/i.test(text)) {
-        session.category = 'TIANG';
-        let cleanLabel = text;
+        let cleanLabel = text.trim();
         if (/^tiang[\s_-]*/i.test(cleanLabel)) {
             cleanLabel = cleanLabel.replace(/^tiang[\s_-]*/i, 'TIANG-').trim();
         } else if (/^t\.[\s_-]*/i.test(cleanLabel)) {
@@ -2784,7 +2804,14 @@ bot.on('text', async (ctx, next) => {
         } else {
             cleanLabel = `TIANG-${cleanLabel}`;
         }
-        session.deviceLabel = cleanLabel.toUpperCase();
+        cleanLabel = cleanLabel.toUpperCase();
+
+        if (cleanLabel === 'TIANG-' || cleanLabel === 'TIANG' || cleanLabel.length <= 6) {
+            return startTiangFlow(ctx);
+        }
+
+        session.category = 'TIANG';
+        session.deviceLabel = cleanLabel;
         session.step = 'waiting_photo';
 
         return ctx.reply(
@@ -2815,6 +2842,29 @@ bot.on('text', async (ctx, next) => {
 bot.on('location', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
+
+    // KASUS TIANG: Cegah share loc GPS jika belum input label tiang
+    if (session.category === 'TIANG' && (session.step === 'waiting_label_tiang' || !session.deviceLabel)) {
+        return ctx.reply(
+            `⚠️ *AKSI DITAHAN: LABEL TIANG BELUM DIINPUT!*\n\n` +
+            `Sesuai SOP, sebelum melakukan share loc GPS, Anda **WAJIB mengetikkan Label / Nomor Tiang terlebih dahulu**.\n\n` +
+            `👉 *Silakan ketikkan Label Tiang sekarang:*\n` +
+            `📌 *Contoh:* \`TIANG-01\`, \`TIANG-SKD 01\`, atau \`T.01\`\n\n` +
+            `_(Ketik /batal jika ingin membatalkan)_`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+
+    // KASUS TIANG: Cegah share loc GPS jika foto evident tiang belum diupload
+    if (session.category === 'TIANG' && (session.step === 'waiting_photo' || !session.pendingPhoto)) {
+        return ctx.reply(
+            `⚠️ *AKSI DITAHAN: FOTO EVIDENT TIANG BELUM DIUNGGAH!*\n\n` +
+            `🏷 *Label Tiang:* \`${session.deviceLabel}\`\n\n` +
+            `Sesuai SOP, silakan ambil dan kirimkan **Foto Evident Tiang** terlebih dahulu sebelum melakukan tagging lokasi GPS.\n\n` +
+            `_(Ketik /batal jika ingin membatalkan)_`,
+            { parse_mode: 'Markdown' }
+        );
+    }
 
     // 1. Tangani Lokasi GPS untuk ODP (Share Loc sebelum Foto Tampak Luar/Depan)
     const isOdpSession = (session.category || '').toUpperCase() === 'ODP' || 
@@ -3013,6 +3063,19 @@ bot.on(['photo', 'document'], async (ctx) => {
     }
 
     const session = getSession(chatId);
+
+    // KASUS TIANG: Cegah upload foto apapun jika belum input label tiang
+    if (session.category === 'TIANG' && (session.step === 'waiting_label_tiang' || !session.deviceLabel)) {
+        return ctx.reply(
+            `⚠️ *AKSI DITAHAN: LABEL TIANG BELUM DIINPUT!*\n\n` +
+            `Sesuai SOP, sebelum mengunggah foto evident, Anda **WAJIB mengetikkan Label / Nomor Tiang terlebih dahulu**.\n\n` +
+            `👉 *Silakan ketikkan Label Tiang Anda sekarang:*\n` +
+            `📌 *Contoh:* \`TIANG-01\`, \`TIANG-SKD 01\`, atau \`T.01\`\n\n` +
+            `_(Ketik /batal jika ingin membatalkan)_`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+
     const caption = ctx.message.caption ? ctx.message.caption.trim() : '';
     const sender = ctx.from || {};
     const senderName = [sender.first_name, sender.last_name].filter(Boolean).join(' ') || (sender.username ? '@' + sender.username : '');
@@ -3372,16 +3435,23 @@ bot.on(['photo', 'document'], async (ctx) => {
 
     // 3. Kategori TIANG (Foto lolos -> Wajib ada Label Tiang & Tagging Lokasi GPS)
     if (session.category === 'TIANG') {
-        let tiangLabel = session.deviceLabel || (caption ? caption.trim() : null);
+        let tiangLabel = session.deviceLabel;
+        if (!tiangLabel && caption) {
+            let clean = caption.trim();
+            if (/^tiang[\s_-]*/i.test(clean)) clean = clean.replace(/^tiang[\s_-]*/i, 'TIANG-').trim();
+            else if (/^t\.[\s_-]*/i.test(clean)) clean = clean.replace(/^t\.[\s_-]*/i, 'TIANG-').trim();
+            else clean = `TIANG-${clean}`;
+            clean = clean.toUpperCase();
+            if (clean !== 'TIANG-' && clean !== 'TIANG' && clean.length > 6) {
+                tiangLabel = clean;
+            }
+        }
+
         if (!tiangLabel) {
-            session.pendingPhotoRaw = {
-                fileSize, fileUrl, fileBuffer, mimeType, sha256Hash, dHash
-            };
             session.step = 'waiting_label_tiang';
             return ctx.reply(
-                `⚠️ *LABEL TIANG DIBUTUHKAN TERLEBIH DAHULU!*\n\n` +
-                `✅ Foto tiang lolos pemeriksaan ketajaman script!\n` +
-                `Sesuai SOP, silakan ketikkan **Label / Nomor Tiang** terlebih dahulu:\n` +
+                `⚠️ *LABEL TIANG WAJIB DIINPUT TERLEBIH DAHULU!*\n\n` +
+                `Sesuai SOP, silakan ketikkan **Label / Nomor Tiang** terlebih dahulu sebelum foto diproses:\n` +
                 `📌 *Contoh:* \`TIANG-01\`, \`TIANG-SKD 01\`, atau \`T.01\`\n\n` +
                 `_(Ketik /batal jika ingin membatalkan)_`,
                 { parse_mode: 'Markdown' }
