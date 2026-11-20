@@ -2913,13 +2913,50 @@ bot.on('location', async (ctx) => {
         const odcCat = session.odcReference || session.category;
 
         // Update semua record modem ini di Supabase dengan koordinat GPS
+        // Strategi: Update berdasarkan modem_sn TERLEBIH DAHULU (paling andal)
+        // lalu fallback ke customer_id jika modem_sn kosong
         try {
             const updatePayload = { location_url: mapsUrl, latitude: lat, longitude: lng };
+            let updated = false;
+
             if (sn !== '-') {
-                await supabase.from('evidents').update(updatePayload).eq('modem_sn', sn);
+                const { error: snErr, data: snData } = await supabase
+                    .from('evidents')
+                    .update(updatePayload)
+                    .eq('modem_sn', sn)
+                    .select('id');
+                if (!snErr && snData && snData.length > 0) {
+                    updated = true;
+                    console.log(`Share Loc Modem [${sn}] tersimpan: ${snData.length} record diperbarui.`);
+                } else if (snErr) {
+                    console.error('Error update by modem_sn:', snErr.message);
+                }
             }
-            if (cId !== '-') {
-                await supabase.from('evidents').update(updatePayload).eq('customer_id', cId);
+
+            // Fallback: update berdasarkan device_label jika modem_sn tidak match
+            if (!updated && odcCat && odcCat !== '-') {
+                const deviceLabelPattern = `%MODEM%${odpRef}%${cId}%`;
+                const { error: lblErr, data: lblData } = await supabase
+                    .from('evidents')
+                    .update(updatePayload)
+                    .ilike('device_label', deviceLabelPattern)
+                    .select('id');
+                if (!lblErr && lblData && lblData.length > 0) {
+                    updated = true;
+                    console.log(`Share Loc Modem [label] tersimpan: ${lblData.length} record diperbarui.`);
+                }
+            }
+
+            // Fallback terakhir: update berdasarkan customer_id
+            if (!updated && cId !== '-') {
+                const { error: cidErr, data: cidData } = await supabase
+                    .from('evidents')
+                    .update(updatePayload)
+                    .eq('customer_id', cId)
+                    .select('id');
+                if (!cidErr && cidData && cidData.length > 0) {
+                    console.log(`Share Loc Modem [customer_id] tersimpan: ${cidData.length} record diperbarui.`);
+                }
             }
         } catch (updateErr) {
             console.error('Gagal simpan share loc modem ke Supabase:', updateErr);

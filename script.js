@@ -1992,60 +1992,92 @@ async function setModemLocation(groupKey, existingUrl = '') {
     let finalUrl = newUrl.trim();
 
     if (finalUrl) {
-        // Ekstrak koordinat dari URL jika tersedia
+        // Ekstrak koordinat dari URL Google Maps / koordinat langsung
         const coordMatch = finalUrl.match(/([-+]?\d{1,2}\.\d+)[,\s]+([-+]?\d{1,3}\.\d+)/);
         if (coordMatch) {
             lat = parseFloat(coordMatch[1]);
             lng = parseFloat(coordMatch[2]);
         }
+        // Pastikan URL valid — jika hanya koordinat saja (tanpa http), jadikan URL Google Maps
+        if (!finalUrl.startsWith('http')) {
+            if (lat && lng) {
+                finalUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+            } else {
+                alert('⚠️ Format URL tidak valid. Masukkan URL Google Maps atau koordinat lat,lng.');
+                return;
+            }
+        }
     } else {
         finalUrl = null;
     }
 
-    // Update semua item dalam grup modem ini di sampleData
-    sampleData.forEach(item => {
-        const isMatch = (() => {
-            if (!item.modemSn && !item.customerId) return false;
-            if (groupKey.startsWith('SN:')) return (item.modemSn || '').trim().toUpperCase() === groupKey.replace('SN:', '');
-            if (groupKey.startsWith('ID:')) return (item.customerId || '').trim().toUpperCase() === groupKey.replace('ID:', '');
-            return (item.name || '').trim().toUpperCase() === groupKey.replace('FILE:', '');
-        })();
+    const payload = { location_url: finalUrl };
+    if (lat && lng) {
+        payload.latitude = lat;
+        payload.longitude = lng;
+    } else if (!finalUrl) {
+        payload.latitude = null;
+        payload.longitude = null;
+    }
 
-        if (isMatch) {
-            item.locationUrl = finalUrl;
-            if (lat && lng) {
-                item.latitude = lat;
-                item.longitude = lng;
-            } else if (!finalUrl) {
-                item.latitude = null;
-                item.longitude = null;
-            }
+    // Kumpulkan semua item ID yang termasuk dalam grup modem ini
+    const matchedItems = sampleData.filter(item => {
+        if (!item.modemSn && !item.customerId && !item.name) return false;
+        if (groupKey.startsWith('SN:')) {
+            const snKey = groupKey.slice(3); // hapus "SN:" dari depan
+            return (item.modemSn || '').trim().toUpperCase() === snKey;
         }
+        if (groupKey.startsWith('ID:')) {
+            const idKey = groupKey.slice(3); // hapus "ID:" dari depan
+            return (item.customerId || '').trim().toUpperCase() === idKey;
+        }
+        if (groupKey.startsWith('FILE:')) {
+            const fileKey = groupKey.slice(5);
+            return (item.name || '').trim().toUpperCase() === fileKey;
+        }
+        return false;
     });
 
-    try {
-        const payload = { location_url: finalUrl };
-        if (lat && lng) {
-            payload.latitude = lat;
-            payload.longitude = lng;
-        } else if (!finalUrl) {
-            payload.latitude = null;
-            payload.longitude = null;
-        }
+    if (matchedItems.length === 0) {
+        alert('⚠️ Tidak ada data modem yang cocok untuk diperbarui. Coba refresh halaman terlebih dahulu.');
+        return;
+    }
 
-        // Update ke Supabase berdasarkan modem_sn atau customer_id
-        if (groupKey.startsWith('SN:')) {
-            const sn = groupKey.replace('SN:', '');
-            await supabaseClient.from('evidents').update(payload).eq('modem_sn', sn);
-        } else if (groupKey.startsWith('ID:')) {
-            const cId = groupKey.replace('ID:', '');
-            await supabaseClient.from('evidents').update(payload).eq('customer_id', cId);
-        }
+    // Update sampleData lokal terlebih dahulu agar tampilan langsung berubah
+    matchedItems.forEach(item => {
+        item.locationUrl = finalUrl;
+        item.latitude = lat;
+        item.longitude = lng;
+    });
 
-        alert(`✅ Titik lokasi GPS untuk Modem "${groupKey}" berhasil ${finalUrl ? 'disimpan' : 'dihapus'}!`);
-    } catch (e) {
-        console.error('Gagal update lokasi Modem ke Supabase:', e);
-        alert('Gagal simpan ke database: ' + (e.message || e));
+    // Update ke Supabase per ID (cara paling andal — tidak tergantung kecocokan kolom lain)
+    const matchedIds = matchedItems.map(it => it.id).filter(Boolean);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const itemId of matchedIds) {
+        try {
+            const { error } = await supabaseClient
+                .from('evidents')
+                .update(payload)
+                .eq('id', itemId)
+                .select();  // .select() penting agar Supabase JS v2 benar-benar menjalankan query
+            if (error) {
+                console.error(`Gagal update ID ${itemId}:`, error);
+                failCount++;
+            } else {
+                successCount++;
+            }
+        } catch (e) {
+            console.error(`Error update ID ${itemId}:`, e);
+            failCount++;
+        }
+    }
+
+    if (failCount === 0) {
+        alert(`✅ Share Loc GPS Modem "${groupKey}" berhasil ${finalUrl ? `disimpan (${successCount} record)` : 'dihapus'}!\n📍 Koordinat: ${lat ? `${lat}, ${lng}` : '-'}`);
+    } else {
+        alert(`⚠️ Sebagian berhasil: ${successCount} tersimpan, ${failCount} gagal.\nCoba refresh halaman lalu ulangi.`);
     }
 
     filterFiles();
