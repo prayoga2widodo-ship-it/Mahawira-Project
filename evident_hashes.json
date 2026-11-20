@@ -673,5 +673,23 @@
     "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 128391111021 | Nama: KEVIN | SN: ZTEGC5199991 [TAMPAK BELAKANG]",
     "date": "20/11/2026, 15.24.35",
     "fileName": "evident_modem_ODP-SKD_01_01_ID_128391111021_SN_ZTEGC5199991_[BELAKANG]_[H:b4739a41bfce27e6][DH:6740403336970c89]_1795163074988.jpg"
+  },
+  {
+    "sha256": "16bf44b9e55411a21132ad183bd81119f431402111d277b4f90cf1a2115bd68b",
+    "dhash": "1006066613356502",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 15667829292 | Nama: GATOT | SN: ZTEGC61719121 [TAMPAK DEPAN]",
+    "date": "20/11/2026, 15.44.28",
+    "fileName": "evident_modem_ODP-SKD_01_01_ID_15667829292_SN_ZTEGC61719121_[DEPAN]_[H:16bf44b9e55411a2][DH:1006066613356502]_1795164268088.jpg"
+  },
+  {
+    "sha256": "66032052b084ee22e2efed8da2024c3b619357a8414bdeaa6d454327c506a77d",
+    "dhash": "01031348ae66552c",
+    "uploader": "Shin Tae Gong (STG) (ID: 119509416)",
+    "category": "ODC-SKD 01",
+    "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 15667829292 | Nama: GATOT | SN: ZTEGC61719121 [TAMPAK BELAKANG]",
+    "date": "20/11/2026, 15.44.52",
+    "fileName": "evident_modem_ODP-SKD_01_01_ID_15667829292_SN_ZTEGC61719121_[BELAKANG]_[H:66032052b084ee22][DH:01031348ae66552c]_1795164292392.jpg"
   }
 ]

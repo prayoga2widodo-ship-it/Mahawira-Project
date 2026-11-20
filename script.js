@@ -3753,6 +3753,19 @@ function toggleMapBasemap() {
     }
 }
 
+// Helper: Deteksi apakah item merupakan evident Modem / Pelanggan
+function isModemEvident(item) {
+    if (!item) return false;
+    return Boolean(
+        item.customerId ||
+        item.customerName ||
+        item.modemSn ||
+        (item.category && item.category.toUpperCase() === 'MODEM') ||
+        (item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
+        (item.name && item.name.toUpperCase().includes('MODEM'))
+    );
+}
+
 // Update Ringkasan Angka Statistik GPS KML
 function updateKmlStats() {
     if (!sampleData || !Array.isArray(sampleData)) return;
@@ -3761,10 +3774,21 @@ function updateKmlStats() {
     let odcCount = 0;
     let odpCount = 0;
     let tiangCount = 0;
+    let modemCount = 0;
+    const seenModems = new Set();
 
     sampleData.forEach(item => {
         const coords = extractCoordinates(item);
-        if (coords) {
+        if (!coords) return;
+
+        if (isModemEvident(item)) {
+            const mKey = (item.customerId || item.modemSn || item.customerName || item.id).toString().toLowerCase().trim();
+            if (!seenModems.has(mKey)) {
+                seenModems.add(mKey);
+                modemCount++;
+                totalGps++;
+            }
+        } else {
             totalGps++;
             const cat = (item.category || '').toUpperCase();
             if (cat.includes('ODC')) odcCount++;
@@ -3777,21 +3801,25 @@ function updateKmlStats() {
     const elOdc = document.getElementById('kmlStatOdc');
     const elOdp = document.getElementById('kmlStatOdp');
     const elTiang = document.getElementById('kmlStatTiang');
+    const elModem = document.getElementById('kmlStatModem');
 
     if (elTotal) elTotal.textContent = totalGps;
     if (elOdc) elOdc.textContent = odcCount;
     if (elOdp) elOdp.textContent = odpCount;
     if (elTiang) elTiang.textContent = tiangCount;
+    if (elModem) elModem.textContent = modemCount;
 
     const elLayerAll = document.getElementById('countLayerAll');
     const elLayerOdc = document.getElementById('countLayerOdc');
     const elLayerOdp = document.getElementById('countLayerOdp');
     const elLayerTiang = document.getElementById('countLayerTiang');
+    const elLayerModem = document.getElementById('countLayerModem');
 
     if (elLayerAll) elLayerAll.textContent = totalGps;
     if (elLayerOdc) elLayerOdc.textContent = odcCount;
     if (elLayerOdp) elLayerOdp.textContent = odpCount;
     if (elLayerTiang) elLayerTiang.textContent = tiangCount;
+    if (elLayerModem) elLayerModem.textContent = modemCount;
 }
 
 // Render Titik-Titik Marker KML pada Canvas Peta
@@ -3804,26 +3832,52 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
 
     const searchStr = (searchQuery || '').toLowerCase().trim();
     const bounds = [];
+    const seenModemMarkers = new Set();
 
     sampleData.forEach(item => {
         const coords = extractCoordinates(item);
         if (!coords) return;
 
-        const cat = (item.category || '').toUpperCase();
+        const isModem = isModemEvident(item);
+        const cat = isModem ? 'MODEM' : (item.category || '').toUpperCase();
 
         // 1. Filter Layer Kategori
         if (layerFilter !== 'all') {
-            if (!cat.includes(layerFilter.toUpperCase())) return;
+            if (layerFilter === 'MODEM') {
+                if (!isModem) return;
+            } else {
+                if (isModem) return;
+                if (!cat.includes(layerFilter.toUpperCase())) return;
+            }
         }
 
-        // 2. Filter Pencarian Text
-        const titleName = item.deviceLabel || item.odpName || item.odcReference || item.name || '';
+        // Deduplikasi marker modem jika foto depan dan belakang berada pada titik yang sama
+        if (isModem) {
+            const mKey = (item.customerId || item.modemSn || item.customerName || item.id).toString().toLowerCase().trim();
+            if (seenModemMarkers.has(mKey)) return;
+            seenModemMarkers.add(mKey);
+        }
+
+        // 2. Filter Pencarian Text (Mendukung Nama Pelanggan, ID Pelanggan, SN Modem, ODP, ODC, Tiang, dll)
+        const custName = (item.customerName || '').trim();
+        const custId = (item.customerId || '').trim();
+        const modemSn = (item.modemSn || '').trim();
+        const odpName = (item.odpName || '').trim();
+        const odcRef = (item.odcReference || '').trim();
+        const titleName = isModem
+            ? (custName ? `${custName} (${custId || 'ID -'})` : (custId ? `ID: ${custId}` : (modemSn ? `SN: ${modemSn}` : (item.deviceLabel || item.name || 'Modem Pelanggan'))))
+            : (item.deviceLabel || item.odpName || item.odcReference || item.name || '');
+
         const matchSearch = !searchStr ||
             titleName.toLowerCase().includes(searchStr) ||
+            custName.toLowerCase().includes(searchStr) ||
+            custId.toLowerCase().includes(searchStr) ||
+            modemSn.toLowerCase().includes(searchStr) ||
+            odpName.toLowerCase().includes(searchStr) ||
+            odcRef.toLowerCase().includes(searchStr) ||
             (item.name || '').toLowerCase().includes(searchStr) ||
-            (item.uploader || '').toLowerCase().includes(searchStr) ||
-            (item.customerName || '').toLowerCase().includes(searchStr) ||
-            (item.modemSn || '').toLowerCase().includes(searchStr);
+            (item.deviceLabel || '').toLowerCase().includes(searchStr) ||
+            (item.uploader || '').toLowerCase().includes(searchStr);
 
         if (!matchSearch) return;
 
@@ -3833,7 +3887,12 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
         let catBadgeBg = 'bg-slate-100 text-slate-800';
         let catLabel = item.category || 'TITIK';
 
-        if (cat.includes('ODC')) {
+        if (isModem) {
+            pinColor = '#0891b2'; // Cyan 600 Modem Pelanggan
+            pinIcon = 'fa-house-signal';
+            catBadgeBg = 'bg-cyan-100 text-cyan-800 border-cyan-200';
+            catLabel = 'MODEM PELANGGAN';
+        } else if (cat.includes('ODC')) {
             pinColor = '#2563eb'; // Biru ODC
             pinIcon = 'fa-server';
             catBadgeBg = 'bg-blue-100 text-blue-800 border-blue-200';
@@ -3867,17 +3926,72 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
 
         // Konten Popup Interaktif
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
-        const viewPhotoBtn = item.fileUrl ? `
-            <div class="mt-2.5 rounded-lg overflow-hidden border border-slate-200 max-h-36 bg-slate-900/5 relative group cursor-pointer" onclick="previewFile(${item.id})">
-                <img src="${item.fileUrl}" alt="${escapeHtml(titleName)}" class="w-full h-32 object-cover group-hover:scale-105 transition duration-300" onerror="this.style.display='none'">
-                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1.5">
-                    <i class="fa-solid fa-eye"></i> Perbesar Foto
+
+        // Foto Evident: Jika modem memiliki pasangan foto depan dan belakang, tampilkan keduanya
+        let viewPhotoBtn = '';
+        if (isModem) {
+            const paired = getPairedEvidents(item, sampleData);
+            const frontItem = paired.front;
+            const backItem = paired.back;
+            if (frontItem && backItem && frontItem.id !== backItem.id) {
+                viewPhotoBtn = `
+                    <div class="mt-2 grid grid-cols-2 gap-1.5">
+                        <div class="rounded-lg overflow-hidden border border-slate-200 bg-slate-900/5 relative group cursor-pointer" onclick="previewFile(${frontItem.id})" title="Klik perbesar foto depan">
+                            <img src="${frontItem.fileUrl}" alt="Tampak Depan" class="w-full h-20 object-cover group-hover:scale-105 transition duration-300" onerror="this.style.display='none'">
+                            <span class="absolute bottom-1 left-1 bg-black/70 text-white text-[8.5px] px-1.5 py-0.5 rounded font-semibold">Depan</span>
+                        </div>
+                        <div class="rounded-lg overflow-hidden border border-slate-200 bg-slate-900/5 relative group cursor-pointer" onclick="previewFile(${backItem.id})" title="Klik perbesar foto belakang">
+                            <img src="${backItem.fileUrl}" alt="Tampak Belakang" class="w-full h-20 object-cover group-hover:scale-105 transition duration-300" onerror="this.style.display='none'">
+                            <span class="absolute bottom-1 left-1 bg-black/70 text-white text-[8.5px] px-1.5 py-0.5 rounded font-semibold">Belakang</span>
+                        </div>
+                    </div>
+                `;
+            } else if (item.fileUrl) {
+                viewPhotoBtn = `
+                    <div class="mt-2.5 rounded-lg overflow-hidden border border-slate-200 max-h-36 bg-slate-900/5 relative group cursor-pointer" onclick="previewFile(${item.id})">
+                        <img src="${item.fileUrl}" alt="${escapeHtml(titleName)}" class="w-full h-32 object-cover group-hover:scale-105 transition duration-300" onerror="this.style.display='none'">
+                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1.5">
+                            <i class="fa-solid fa-eye"></i> Perbesar Foto
+                        </div>
+                    </div>
+                `;
+            }
+        } else if (item.fileUrl) {
+            viewPhotoBtn = `
+                <div class="mt-2.5 rounded-lg overflow-hidden border border-slate-200 max-h-36 bg-slate-900/5 relative group cursor-pointer" onclick="previewFile(${item.id})">
+                    <img src="${item.fileUrl}" alt="${escapeHtml(titleName)}" class="w-full h-32 object-cover group-hover:scale-105 transition duration-300" onerror="this.style.display='none'">
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1.5">
+                        <i class="fa-solid fa-eye"></i> Perbesar Foto
+                    </div>
                 </div>
-            </div>
+            `;
+        }
+
+        // Info khusus modem (Pelanggan, ID, SN Modem, ODP)
+        let modemDetailsHtml = '';
+        if (isModem) {
+            modemDetailsHtml = `
+                <div class="bg-cyan-50/70 p-2 rounded-lg border border-cyan-200/80 space-y-1 text-[10px] mb-2">
+                    ${custName ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-user mr-1 text-cyan-600"></i>Pelanggan:</span><span class="font-bold text-slate-800">${escapeHtml(custName)}</span></div>` : ''}
+                    ${custId ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-id-card mr-1 text-cyan-600"></i>ID:</span><span class="font-mono font-bold text-cyan-800">${escapeHtml(custId)}</span></div>` : ''}
+                    ${modemSn ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-barcode mr-1 text-cyan-600"></i>SN Modem:</span><span class="font-mono font-bold text-slate-700">${escapeHtml(modemSn)}</span></div>` : ''}
+                    ${odpName ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-network-wired mr-1 text-green-600"></i>ODP:</span><span class="font-bold text-green-700">${escapeHtml(odpName)}</span></div>` : ''}
+                    ${odcRef ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-server mr-1 text-blue-600"></i>Induk ODC:</span><span class="font-bold text-blue-700">${escapeHtml(odcRef)}</span></div>` : ''}
+                </div>
+            `;
+        }
+
+        // Tombol Riwayat Pelanggan jika item adalah modem
+        const historyBtn = (isModem && (custId || custName)) ? `
+            <button type="button" onclick="openCustomerHistoryModal('${escapeHtml(custId)}', '${escapeHtml(custName)}', '${escapeHtml(modemSn)}')"
+                class="w-full py-1.5 px-3 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 rounded-lg text-[11px] font-bold text-center flex items-center justify-center gap-1.5 transition">
+                <i class="fa-solid fa-clock-rotate-left text-xs"></i>
+                <span>Riwayat Evident Pelanggan</span>
+            </button>
         ` : '';
 
         const popupHtml = `
-            <div class="p-2 space-y-2 max-w-[270px] text-slate-800">
+            <div class="p-2 space-y-2 max-w-[280px] text-slate-800">
                 <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${catBadgeBg}">${catLabel}</span>
                     <span class="text-[9.5px] font-mono text-slate-400">#${item.id || '-'}</span>
@@ -3885,8 +3999,10 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
 
                 <div>
                     <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(titleName)}</h4>
-                    ${item.odcReference ? `<p class="text-[10px] text-slate-500 font-semibold mt-0.5"><i class="fa-solid fa-server mr-1 text-blue-500"></i>Induk: ${escapeHtml(item.odcReference)}</p>` : ''}
+                    ${(!isModem && odcRef) ? `<p class="text-[10px] text-slate-500 font-semibold mt-0.5"><i class="fa-solid fa-server mr-1 text-blue-500"></i>Induk: ${escapeHtml(odcRef)}</p>` : ''}
                 </div>
+
+                ${modemDetailsHtml}
 
                 <div class="bg-slate-50 p-2 rounded-lg border border-slate-200/80 space-y-1 text-[10px]">
                     <div class="flex items-center justify-between">
@@ -3911,6 +4027,7 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
                         <i class="fa-solid fa-diamond-turn-right text-xs"></i>
                         <span>Navigasi Rute (Google Maps)</span>
                     </a>
+                    ${historyBtn}
                 </div>
             </div>
         `;
@@ -3924,6 +4041,9 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
         kmlMarkersList.push({
             id: item.id,
             name: titleName,
+            customerName: custName,
+            customerId: custId,
+            modemSn: modemSn,
             category: cat,
             marker: marker,
             coords: coords
@@ -3942,7 +4062,8 @@ function filterKmlLayer(layerType) {
         all: document.getElementById('btnLayerAll'),
         ODC: document.getElementById('btnLayerOdc'),
         ODP: document.getElementById('btnLayerOdp'),
-        TIANG: document.getElementById('btnLayerTiang')
+        TIANG: document.getElementById('btnLayerTiang'),
+        MODEM: document.getElementById('btnLayerModem')
     };
 
     Object.keys(buttons).forEach(key => {
@@ -4059,21 +4180,36 @@ function exportKmlFile() {
         ODC: [],
         ODP: [],
         TIANG: [],
+        MODEM: [],
         LAINNYA: []
     };
 
     let totalPoints = 0;
+    const seenModemKml = new Set();
 
     sampleData.forEach(item => {
         const coords = extractCoordinates(item);
         if (!coords) return;
 
         totalPoints++;
+        const isModem = isModemEvident(item);
         const cat = (item.category || '').toUpperCase();
-        if (cat.includes('ODC')) grouped.ODC.push({ item, coords });
-        else if (cat.includes('ODP')) grouped.ODP.push({ item, coords });
-        else if (cat.includes('TIANG')) grouped.TIANG.push({ item, coords });
-        else grouped.LAINNYA.push({ item, coords });
+
+        if (isModem) {
+            const mKey = (item.customerId || item.modemSn || item.customerName || item.id).toString().toLowerCase().trim();
+            if (!seenModemKml.has(mKey)) {
+                seenModemKml.add(mKey);
+                grouped.MODEM.push({ item, coords });
+            }
+        } else if (cat.includes('ODC')) {
+            grouped.ODC.push({ item, coords });
+        } else if (cat.includes('ODP')) {
+            grouped.ODP.push({ item, coords });
+        } else if (cat.includes('TIANG')) {
+            grouped.TIANG.push({ item, coords });
+        } else {
+            grouped.LAINNYA.push({ item, coords });
+        }
     });
 
     if (totalPoints === 0) {
@@ -4082,16 +4218,30 @@ function exportKmlFile() {
     }
 
     const formatPlacemark = (it, c, catName) => {
-        const titleName = it.deviceLabel || it.odpName || it.odcReference || it.name || `${catName} Item`;
+        const isModem = (catName === 'MODEM');
+        const custName = (it.customerName || '').trim();
+        const custId = (it.customerId || '').trim();
+        const titleName = isModem
+            ? (custName ? `${custName} (${custId || 'ID -'})` : (custId ? `ID: ${custId}` : (it.modemSn ? `SN: ${it.modemSn}` : (it.deviceLabel || it.name || 'Modem Pelanggan'))))
+            : (it.deviceLabel || it.odpName || it.odcReference || it.name || `${catName} Item`);
+
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
         const photoTag = it.fileUrl ? `<p><img src="${it.fileUrl}" width="300" style="border-radius:8px;margin-top:6px;"/></p>` : '';
         const odcTag = it.odcReference ? `<p><b>Induk ODC:</b> ${escapeHtml(it.odcReference)}</p>` : '';
+        const odpTag = it.odpName ? `<p><b>ODP:</b> ${escapeHtml(it.odpName)}</p>` : '';
+        const modemTag = isModem ? `
+            ${custName ? `<p><b>Nama Pelanggan:</b> ${escapeHtml(custName)}</p>` : ''}
+            ${custId ? `<p><b>ID Pelanggan:</b> ${escapeHtml(custId)}</p>` : ''}
+            ${it.modemSn ? `<p><b>SN Modem:</b> ${escapeHtml(it.modemSn)}</p>` : ''}
+        ` : '';
 
         const desc = `
             <![CDATA[
                 <div style="font-family: Arial, sans-serif; font-size: 13px; line-height: 1.5; color: #1e293b;">
                     <h3 style="color: #0f172a; margin-bottom: 4px;">${escapeHtml(titleName)}</h3>
                     <p style="margin: 2px 0;"><b>Kategori:</b> ${escapeHtml(catName)}</p>
+                    ${modemTag}
+                    ${odpTag}
                     ${odcTag}
                     <p style="margin: 2px 0;"><b>Pengunggah:</b> ${escapeHtml(it.uploader || '-')}</p>
                     <p style="margin: 2px 0;"><b>Tanggal:</b> ${escapeHtml(it.date || '-')}</p>
@@ -4121,7 +4271,7 @@ function exportKmlFile() {
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>Evident Network GIS - PT MAHAWIRA NUSANTARA GRUP</name>
-    <description>Peta Titik Jaringan ODC, ODP, dan Tiang Fiber Optik Hasil Evident Lapangan</description>
+    <description>Peta Titik Jaringan ODC, ODP, Tiang Fiber Optik &amp; Modem Pelanggan Hasil Evident Lapangan</description>
 
     <!-- Style Marker Pin ODC (Biru) -->
     <Style id="style_odc">
@@ -4152,6 +4302,17 @@ function exportKmlFile() {
         <scale>1.2</scale>
         <Icon>
           <href>http://maps.google.com/mapfiles/kml/paddle/ylw-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+
+    <!-- Style Marker Pin MODEM (Cyan) -->
+    <Style id="style_modem">
+      <IconStyle>
+        <color>ffffff00</color>
+        <scale>1.2</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/cyan-circle.png</href>
         </Icon>
       </IconStyle>
     </Style>
@@ -4191,6 +4352,15 @@ function exportKmlFile() {
         kmlContent += `    <Folder>\n      <name>🗼 Tiang Fiber Optik (${grouped.TIANG.length} Titik)</name>\n`;
         grouped.TIANG.forEach(entry => {
             kmlContent += formatPlacemark(entry.item, entry.coords, 'TIANG');
+        });
+        kmlContent += `\n    </Folder>\n`;
+    }
+
+    // Folder MODEM PELANGGAN
+    if (grouped.MODEM.length > 0) {
+        kmlContent += `    <Folder>\n      <name>💻 Modem Pelanggan (${grouped.MODEM.length} Titik)</name>\n`;
+        grouped.MODEM.forEach(entry => {
+            kmlContent += formatPlacemark(entry.item, entry.coords, 'MODEM');
         });
         kmlContent += `\n    </Folder>\n`;
     }

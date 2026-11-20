@@ -462,7 +462,7 @@
         <div id="kmlView" class="hidden space-y-6">
 
             <!-- Stat Cards Khusus KML & GIS -->
-            <section class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <section class="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
                 <div class="bg-white rounded-xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between">
                     <div>
                         <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Total Titik GPS</p>
@@ -504,6 +504,17 @@
                     </div>
                     <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-lg shadow-2xs">
                         <i class="fa-solid fa-tower-broadcast"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-4 border border-cyan-200/80 shadow-xs flex items-center justify-between col-span-2 sm:col-span-1">
+                    <div>
+                        <p class="text-[10.5px] font-bold uppercase tracking-wider text-cyan-600">Modem Pelanggan</p>
+                        <p class="text-xl sm:text-2xl font-black text-cyan-800 mt-0.5" id="kmlStatModem">0</p>
+                        <span class="text-[9.5px] text-cyan-500">Titik Rumah Pelanggan</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center text-lg shadow-2xs">
+                        <i class="fa-solid fa-house-signal"></i>
                     </div>
                 </div>
             </section>
@@ -575,13 +586,18 @@
                                 <span class="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
                                 Tiang (<span id="countLayerTiang">0</span>)
                             </button>
+                            <button type="button" onclick="filterKmlLayer('MODEM')" id="btnLayerModem"
+                                class="kml-filter-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 hover:bg-cyan-50 hover:text-cyan-700 transition flex items-center gap-1 cursor-pointer">
+                                <span class="w-2 h-2 rounded-full bg-cyan-600 inline-block"></span>
+                                Modem (<span id="countLayerModem">0</span>)
+                            </button>
                         </div>
 
                         <!-- Search Box di Peta -->
-                        <div class="relative w-full sm:w-72">
+                        <div class="relative w-full sm:w-80">
                             <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                             <input type="text" id="kmlSearchInput" oninput="searchKmlPoints(this.value)"
-                                placeholder="Cari tiang / ODP / ODC di peta..."
+                                placeholder="Cari pelanggan, ID, modem, tiang, ODP, ODC di peta..."
                                 class="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition">
                             <button id="clearKmlSearchBtn" onclick="clearKmlSearch()"
                                 class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
@@ -602,6 +618,7 @@
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">ODC Induk</span></div>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">ODP Jaringan</span></div>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">Tiang Fiber Optik</span></div>
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-cyan-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">Modem Pelanggan</span></div>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 border border-white shadow-2xs animate-pulse"></span> <span class="font-semibold text-slate-700">Lokasi Anda (GPS)</span></div>
                     </div>
                 </div>
@@ -851,7 +868,7 @@
 
     <!-- Application JavaScript Scripts (Cache-Busted to Ensure Instant Update) -->
     <script src="config.js?v=20261120_03"></script>
-    <script src="script.js?v=20261120_06"></script>
+    <script src="script.js?v=20261120_07"></script>
 </body>
 
 </html>
