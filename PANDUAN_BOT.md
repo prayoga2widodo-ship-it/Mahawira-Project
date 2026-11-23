@@ -61,6 +61,15 @@ Bot Telegram ini digunakan oleh teknisi lapangan untuk mengunggah berkas evident
    * Jika ada teknisi atau pengguna siapapun yang mengunggah foto yang pernah di-upload sebelumnya, **bot akan otomatis menolak foto tersebut**.
    * Bot akan menampilkan rincian pengunggah pertama, waktu upload, dan label perangkat foto asli, serta mewajibkan foto baru real-time di lapangan.
 
+7. **Pencegahan & Pembatalan Otomatis Share Loc Manual (Wajib Klik Tombol Bot)**
+   * Bot otomatis memeriksa integritas koordinat GPS (`horizontal_accuracy`, sensor hardware, dan forward status).
+   * Jika teknisi mencoba mengirim lokasi **manual** (seperti menggeser pin peta secara manual, memilih nama tempat/venue buatan, atau meneruskan lokasi dari chat lain), **bot akan otomatis MEMBATALKAN / MENOLAK share loc tersebut**.
+   * Teknisi wajib berada langsung di lokasi fisik dan menekan tombol keyboard bawaan yang disediakan oleh bot:
+     - `[📍 Kirim Lokasi GPS ODC Sekarang]`
+     - `[📍 Kirim Lokasi GPS ODP Sekarang]`
+     - `[📍 Kirim Lokasi Tiang Sekarang]`
+     - `[📍 Kirim Share Loc Modem]`
+
 ---
 
 ## 🚀 Perintah Command Telegram
