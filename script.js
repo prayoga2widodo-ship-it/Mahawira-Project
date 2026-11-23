@@ -3983,12 +3983,12 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
         let modemDetailsHtml = '';
         if (isModem) {
             modemDetailsHtml = `
-                <div class="bg-cyan-50/70 p-2 rounded-lg border border-cyan-200/80 space-y-1 text-[10px] mb-2">
-                    ${custName ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-user mr-1 text-cyan-600"></i>Pelanggan:</span><span class="font-bold text-slate-800">${escapeHtml(custName)}</span></div>` : ''}
-                    ${custId ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-id-card mr-1 text-cyan-600"></i>ID:</span><span class="font-mono font-bold text-cyan-800">${escapeHtml(custId)}</span></div>` : ''}
-                    ${modemSn ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-barcode mr-1 text-cyan-600"></i>SN Modem:</span><span class="font-mono font-bold text-slate-700">${escapeHtml(modemSn)}</span></div>` : ''}
-                    ${odpName ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-network-wired mr-1 text-green-600"></i>ODP:</span><span class="font-bold text-green-700">${escapeHtml(odpName)}</span></div>` : ''}
-                    ${odcRef ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-server mr-1 text-blue-600"></i>Induk ODC:</span><span class="font-bold text-blue-700">${escapeHtml(odcRef)}</span></div>` : ''}
+                <div class="bg-cyan-50/70 p-1.5 rounded-md border border-cyan-200/80 space-y-0.5 text-[9px] mb-1.5">
+                    ${custName ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-user mr-1 text-cyan-600 text-[8.5px]"></i>Pelanggan:</span><span class="font-bold text-slate-800">${escapeHtml(custName)}</span></div>` : ''}
+                    ${custId ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-id-card mr-1 text-cyan-600 text-[8.5px]"></i>ID:</span><span class="font-mono font-bold text-cyan-800">${escapeHtml(custId)}</span></div>` : ''}
+                    ${modemSn ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-barcode mr-1 text-cyan-600 text-[8.5px]"></i>SN Modem:</span><span class="font-mono font-bold text-slate-700">${escapeHtml(modemSn)}</span></div>` : ''}
+                    ${odpName ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-network-wired mr-1 text-green-600 text-[8.5px]"></i>ODP:</span><span class="font-bold text-green-700">${escapeHtml(odpName)}</span></div>` : ''}
+                    ${odcRef ? `<div class="flex items-center justify-between"><span class="text-slate-500 font-semibold"><i class="fa-solid fa-server mr-1 text-blue-600 text-[8.5px]"></i>Induk ODC:</span><span class="font-bold text-blue-700">${escapeHtml(odcRef)}</span></div>` : ''}
                 </div>
             `;
         }
@@ -3996,47 +3996,47 @@ function renderKmlPoints(layerFilter = 'all', searchQuery = '') {
         // Tombol Riwayat Pelanggan jika item adalah modem
         const historyBtn = (isModem && (custId || custName)) ? `
             <button type="button" onclick="openCustomerHistoryModal('${escapeHtml(custId)}', '${escapeHtml(custName)}', '${escapeHtml(modemSn)}')"
-                class="w-full py-1.5 px-3 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 rounded-lg text-[11px] font-bold text-center flex items-center justify-center gap-1.5 transition">
-                <i class="fa-solid fa-clock-rotate-left text-xs"></i>
+                class="w-full py-1 px-2.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 rounded-lg text-[10px] font-bold text-center flex items-center justify-center gap-1 transition cursor-pointer">
+                <i class="fa-solid fa-clock-rotate-left text-[9.5px]"></i>
                 <span>Riwayat Evident Pelanggan</span>
             </button>
         ` : '';
 
         const popupHtml = `
-            <div class="p-2 space-y-2 max-w-[280px] text-slate-800">
-                <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${catBadgeBg}">${catLabel}</span>
-                    <span class="text-[9.5px] font-mono text-slate-400">#${item.id || '-'}</span>
+            <div class="p-1.5 space-y-1.5 max-w-[260px] text-slate-800">
+                <div class="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-1">
+                    <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${catBadgeBg}">${catLabel}</span>
+                    <span class="text-[8.5px] font-mono text-slate-400">#${item.id || '-'}</span>
                 </div>
 
                 <div>
-                    <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(titleName)}</h4>
-                    ${(!isModem && odcRef) ? `<p class="text-[10px] text-slate-500 font-semibold mt-0.5"><i class="fa-solid fa-server mr-1 text-blue-500"></i>Induk: ${escapeHtml(odcRef)}</p>` : ''}
+                    <h4 class="text-[11px] font-bold text-slate-900 leading-tight">${escapeHtml(titleName)}</h4>
+                    ${(!isModem && odcRef) ? `<p class="text-[9px] text-slate-500 font-semibold mt-0.5"><i class="fa-solid fa-server mr-1 text-blue-500 text-[8.5px]"></i>Induk: ${escapeHtml(odcRef)}</p>` : ''}
                 </div>
 
                 ${modemDetailsHtml}
 
-                <div class="bg-slate-50 p-2 rounded-lg border border-slate-200/80 space-y-1 text-[10px]">
+                <div class="bg-slate-50 p-1.5 rounded-md border border-slate-200/80 space-y-0.5 text-[9px]">
                     <div class="flex items-center justify-between">
-                        <span class="text-slate-500"><i class="fa-solid fa-location-crosshairs mr-1 text-emerald-600"></i>Koordinat:</span>
+                        <span class="text-slate-500"><i class="fa-solid fa-location-crosshairs mr-1 text-emerald-600 text-[8.5px]"></i>Koordinat:</span>
                         <span class="font-mono font-bold text-slate-700">${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}</span>
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-slate-500"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah:</span>
-                        <span class="font-medium text-slate-700 truncate max-w-[120px]">${escapeHtml(item.uploader || '-')}</span>
+                        <span class="text-slate-500"><i class="fa-solid fa-user-pen mr-1 text-slate-400 text-[8.5px]"></i>Pengunggah:</span>
+                        <span class="font-medium text-slate-700 truncate max-w-[110px]">${escapeHtml(item.uploader || '-')}</span>
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-slate-500"><i class="fa-solid fa-clock mr-1 text-slate-400"></i>Waktu:</span>
+                        <span class="text-slate-500"><i class="fa-solid fa-clock mr-1 text-slate-400 text-[8.5px]"></i>Waktu:</span>
                         <span class="font-medium text-slate-600">${escapeHtml(item.date || '-')}</span>
                     </div>
                 </div>
 
                 ${viewPhotoBtn}
 
-                <div class="pt-1.5 flex flex-col gap-1.5">
+                <div class="pt-1 flex flex-col gap-1">
                     <a href="${navUrl}" target="_blank" rel="noopener noreferrer"
-                        class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition shadow-xs shadow-emerald-600/30">
-                        <i class="fa-solid fa-diamond-turn-right text-xs"></i>
+                        class="w-full py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10.5px] font-bold text-center flex items-center justify-center gap-1 transition shadow-xs shadow-emerald-600/30 cursor-pointer">
+                        <i class="fa-solid fa-diamond-turn-right text-[9.5px]"></i>
                         <span>Navigasi Rute (Google Maps)</span>
                     </a>
                     ${historyBtn}
@@ -4631,14 +4631,14 @@ function showKmlUploadPreviewModal() {
 
         allItems.slice(0, 10).forEach(item => {
             const row = document.createElement('div');
-            row.className = 'flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/60 text-[11px]';
+            row.className = 'flex items-center justify-between p-1.5 rounded-lg bg-slate-50 border border-slate-200/60 text-[10px]';
             row.innerHTML = `
                 <div class="truncate max-w-[200px]">
                     <span class="font-bold text-slate-800">${escapeHtml(item.name)}</span>
                 </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-[9.5px] px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200 font-semibold">${item.type}</span>
-                    <span class="font-mono text-slate-400 text-[10px]">${item.coords}</span>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[8.5px] px-1 py-0.2 rounded bg-white text-slate-600 border border-slate-200 font-semibold">${item.type}</span>
+                    <span class="font-mono text-slate-400 text-[9px]">${item.coords}</span>
                 </div>
             `;
             elList.appendChild(row);
@@ -4646,7 +4646,7 @@ function showKmlUploadPreviewModal() {
 
         if (allItems.length > 10) {
             const more = document.createElement('p');
-            more.className = 'text-[10.5px] text-slate-400 text-center italic pt-1';
+            more.className = 'text-[9.5px] text-slate-400 text-center italic pt-1';
             more.textContent = `...dan ${allItems.length - 10} elemen lainnya`;
             elList.appendChild(more);
         }
@@ -4693,27 +4693,27 @@ function renderUploadedKmlLayer() {
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${startPt[0]},${startPt[1]}`;
 
         const popupHtml = `
-            <div class="p-2 space-y-2 max-w-[280px] text-slate-800">
-                <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                        <i class="fa-solid fa-route mr-1"></i>JALUR KABEL FO
+            <div class="p-1.5 space-y-1.5 max-w-[260px] text-slate-800">
+                <div class="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-1">
+                    <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                        <i class="fa-solid fa-route mr-1 text-[8.5px]"></i>JALUR KABEL FO
                     </span>
-                    <span class="text-[9.5px] font-mono text-indigo-700 font-bold">${lenText}</span>
+                    <span class="text-[8.5px] font-mono text-indigo-700 font-bold">${lenText}</span>
                 </div>
                 <div>
-                    <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(ln.name)}</h4>
-                    ${ln.description ? `<div class="mt-1 text-[10.5px] text-slate-600 max-h-24 overflow-y-auto bg-slate-50 p-1.5 rounded border border-slate-200/70">${escapeHtml(ln.description)}</div>` : ''}
+                    <h4 class="text-[11px] font-bold text-slate-900 leading-tight">${escapeHtml(ln.name)}</h4>
+                    ${ln.description ? `<div class="mt-1 text-[9.5px] text-slate-600 max-h-20 overflow-y-auto bg-slate-50 p-1.5 rounded border border-slate-200/70">${escapeHtml(ln.description)}</div>` : ''}
                 </div>
-                <div class="pt-1">
+                <div class="pt-0.5">
                     <a href="${navUrl}" target="_blank" rel="noopener noreferrer"
-                        class="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition">
-                        <i class="fa-solid fa-diamond-turn-right text-xs"></i>
+                        class="w-full py-1.5 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10.5px] font-bold text-center flex items-center justify-center gap-1 transition cursor-pointer">
+                        <i class="fa-solid fa-diamond-turn-right text-[9.5px]"></i>
                         <span>Navigasi ke Titik Awal Jalur</span>
                     </a>
                 </div>
             </div>
         `;
-        polyline.bindPopup(popupHtml, { maxWidth: 300 });
+        polyline.bindPopup(popupHtml, { maxWidth: 280 });
         uploadedKmlLayerGroup.addLayer(polyline);
     });
 
@@ -4726,10 +4726,10 @@ function renderUploadedKmlLayer() {
             weight: 2
         });
         const popupHtml = `
-            <div class="p-2 space-y-1.5 max-w-[260px] text-slate-800">
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">AREA POLYGON</span>
-                <h4 class="text-xs font-bold text-slate-900">${escapeHtml(pl.name)}</h4>
-                ${pl.description ? `<p class="text-[10.5px] text-slate-600">${escapeHtml(pl.description)}</p>` : ''}
+            <div class="p-1.5 space-y-1 max-w-[240px] text-slate-800">
+                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">AREA POLYGON</span>
+                <h4 class="text-[11px] font-bold text-slate-900 leading-tight">${escapeHtml(pl.name)}</h4>
+                ${pl.description ? `<p class="text-[9.5px] text-slate-600">${escapeHtml(pl.description)}</p>` : ''}
             </div>
         `;
         polygon.bindPopup(popupHtml);
@@ -4776,32 +4776,32 @@ function renderUploadedKmlLayer() {
 
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${pt.lat},${pt.lng}`;
         const popupHtml = `
-            <div class="p-2 space-y-2 max-w-[280px] text-slate-800">
-                <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}">
+            <div class="p-1.5 space-y-1.5 max-w-[260px] text-slate-800">
+                <div class="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-1">
+                    <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${badgeBg}">
                         ${pt.category} (KML)
                     </span>
-                    <span class="text-[9.5px] font-mono text-slate-400">Unggahan</span>
+                    <span class="text-[8.5px] font-mono text-slate-400">Unggahan</span>
                 </div>
                 <div>
-                    <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(pt.name)}</h4>
-                    ${pt.description ? `<div class="mt-1 text-[10.5px] text-slate-600 max-h-24 overflow-y-auto bg-slate-50 p-1.5 rounded border border-slate-200/70">${escapeHtml(pt.description)}</div>` : ''}
+                    <h4 class="text-[11px] font-bold text-slate-900 leading-tight">${escapeHtml(pt.name)}</h4>
+                    ${pt.description ? `<div class="mt-1 text-[9.5px] text-slate-600 max-h-20 overflow-y-auto bg-slate-50 p-1.5 rounded border border-slate-200/70">${escapeHtml(pt.description)}</div>` : ''}
                 </div>
-                <div class="bg-slate-50 p-2 rounded-lg border border-slate-200/80 space-y-1 text-[10px]">
+                <div class="bg-slate-50 p-1.5 rounded-md border border-slate-200/80 space-y-0.5 text-[9px]">
                     <div class="flex items-center justify-between">
-                        <span class="text-slate-500"><i class="fa-solid fa-location-crosshairs mr-1 text-emerald-600"></i>Koordinat:</span>
+                        <span class="text-slate-500"><i class="fa-solid fa-location-crosshairs mr-1 text-emerald-600 text-[8.5px]"></i>Koordinat:</span>
                         <span class="font-mono font-bold text-slate-700">${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}</span>
                     </div>
                 </div>
-                <div class="pt-1 flex flex-col gap-1.5">
+                <div class="pt-0.5 flex flex-col gap-1">
                     <a href="${navUrl}" target="_blank" rel="noopener noreferrer"
-                        class="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition">
-                        <i class="fa-solid fa-diamond-turn-right text-xs"></i>
+                        class="w-full py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10.5px] font-bold text-center flex items-center justify-center gap-1 transition cursor-pointer">
+                        <i class="fa-solid fa-diamond-turn-right text-[9.5px]"></i>
                         <span>Navigasi Rute (Google Maps)</span>
                     </a>
                     <button type="button" onclick="saveSingleKmlPointToDb('${pt.id}')"
-                        class="w-full py-1.5 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition">
-                        <i class="fa-solid fa-cloud-arrow-up text-blue-600 text-xs"></i>
+                        class="w-full py-1.5 px-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-[10.5px] font-bold text-center flex items-center justify-center gap-1 transition cursor-pointer">
+                        <i class="fa-solid fa-cloud-arrow-up text-blue-600 text-[9.5px]"></i>
                         <span>Simpan Titik Ini ke Evident</span>
                     </button>
                 </div>
@@ -4809,7 +4809,7 @@ function renderUploadedKmlLayer() {
         `;
 
         const marker = L.marker([pt.lat, pt.lng], { icon: leafletIcon })
-            .bindPopup(popupHtml, { maxWidth: 300 });
+            .bindPopup(popupHtml, { maxWidth: 280 });
 
         uploadedKmlLayerGroup.addLayer(marker);
     });

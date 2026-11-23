@@ -691,5 +691,14 @@
     "deviceLabel": "MODEM [ODP-SKD 01/01] - ID: 15667829292 | Nama: GATOT | SN: ZTEGC61719121 [TAMPAK BELAKANG]",
     "date": "20/11/2026, 15.44.52",
     "fileName": "evident_modem_ODP-SKD_01_01_ID_15667829292_SN_ZTEGC61719121_[BELAKANG]_[H:66032052b084ee22][DH:01031348ae66552c]_1795164292392.jpg"
+  },
+  {
+    "sha256": "b9d1951f345b0295c088532f37b9138c961de87becb79f5ff2ace301bf5659d3",
+    "dhash": "b8f971878d0fb194",
+    "uploader": "Rizky dian (ID: 6469544271)",
+    "category": "ODC",
+    "deviceLabel": "ODC-CHSN 01 [TAMPAK LUAR]",
+    "date": "23/11/2026, 12.13.38",
+    "fileName": "evident_ODC-CHSN_01_[TAMPAK_LUAR]_[H:b9d1951f345b0295][DH:b8f971878d0fb194]_1795410817507.jpg"
   }
 ]

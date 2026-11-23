@@ -2893,40 +2893,56 @@ bot.on('location', async (ctx) => {
 
     if (!loc) return;
 
-    // VALIDASI SOP: Cegah & Batalkan Share Loc Manual (Pin Drop / Forward / Geser Peta)
-    // Telegram Bot API: horizontal_accuracy HANYA ada jika dikirim langsung via sensor GPS perangkat (tombol keyboard request_location / Send My Current Location).
-    // Jika teknisi menggeser pin peta atau meneruskan lokasi dari chat lain, horizontal_accuracy bernilai undefined/null atau pesan berstatus forward.
+    // VALIDASI SOP 1: Tolak jika lokasi merupakan pesan terusan (forward) dari chat lain
     const isForwarded = Boolean(ctx.message.forward_date || ctx.message.forward_origin || ctx.message.forward_from || ctx.message.forward_from_chat);
-    const isManualLocation = isForwarded || (loc.horizontal_accuracy === undefined || loc.horizontal_accuracy === null);
-
-    if (isManualLocation) {
-        let btnText = '📍 Kirim Lokasi GPS Asli Sekarang';
-        let extraBtns = ['❌ Batalkan Sesi'];
-
-        if (session.category === 'MODEM') {
-            btnText = '📍 Kirim Share Loc Modem';
-            extraBtns = ['❌ Batalkan Sesi'];
-        } else if (session.category === 'ODC') {
-            btnText = '📍 Kirim Lokasi GPS ODC Sekarang';
-        } else if (session.category === 'ODP') {
-            btnText = '📍 Kirim Lokasi GPS ODP Sekarang';
-        } else if (session.category === 'TIANG') {
-            btnText = '📍 Kirim Lokasi Tiang Sekarang';
-        }
+    if (isForwarded) {
+        let btnText = '📍 Kirim Lokasi GPS Sekarang';
+        if (session.category === 'MODEM') btnText = '📍 Kirim Share Loc Modem';
+        else if (session.category === 'ODC') btnText = '📍 Kirim Lokasi GPS ODC Sekarang';
+        else if (session.category === 'ODP') btnText = '📍 Kirim Lokasi GPS ODP Sekarang';
+        else if (session.category === 'TIANG') btnText = '📍 Kirim Lokasi Tiang Sekarang';
 
         return ctx.reply(
-            `🚫 *SHARE LOC MANUAL DITOLAK / DIBATALKAN!*\n\n` +
-            `⚠️ *Peringatan Sistem:* Bot mendeteksi Anda mengirimkan titik lokasi secara **manual** (menggeser pin pada peta, memilih lokasi palsu, atau meneruskan pesan).\n\n` +
+            `🚫 *SHARE LOC FORWARD / TERUSAN DITOLAK!*\n\n` +
+            `⚠️ *Peringatan Sistem:* Bot mendeteksi Anda meneruskan (forward) lokasi dari orang atau obrolan lain.\n\n` +
             `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
-            `Teknisi lapangan **WAJIB** berada langsung di titik fisik perangkat dan membagikan **Share Loc GPS Realtime Asli** menggunakan tombol yang telah disediakan oleh bot di bawah keyboard.\n\n` +
+            `Teknisi lapangan **WAJIB** berada langsung di titik fisik perangkat dan menekan tombol yang telah disediakan oleh bot di bawah keyboard.\n\n` +
             `👉 *Silakan tekan tombol di bawah keyboard Anda sekarang:*`,
             {
                 parse_mode: 'Markdown',
                 ...Markup.keyboard([
                     [Markup.button.locationRequest(btnText)],
-                    extraBtns
+                    ['❌ Batalkan Sesi']
                 ]).resize()
             }
+        );
+    }
+
+    // VALIDASI SOP 2: Pastikan bot sedang dalam alur yang meminta lokasi
+    const isExpectingLocation = 
+        (session.category === 'MODEM' && (session.step === 'waiting_modem_location' || session.step === 'waiting_modem_shareloc')) ||
+        (session.category === 'ODC' && (session.step === 'waiting_location_odc' || session.step === 'waiting_location')) ||
+        (session.category === 'ODP' && (session.step === 'waiting_location_odp' || session.step === 'waiting_location')) ||
+        (session.category === 'TIANG' && session.step === 'waiting_location');
+
+    if (!isExpectingLocation) {
+        return ctx.reply(
+            `⚠️ *LOKASI DITOLAK: TIDAK SEDANG DALAM SESI INPUT LOKASI!*\n\n` +
+            `Bot hanya menerima lokasi saat Anda berada di menu input perangkat (ODC, ODP, Tiang, atau Modem) dan diminta menekan tombol share loc.\n\n` +
+            `Silakan pilih menu di bawah ini:`,
+            buildMainInlineMenu()
+        );
+    }
+
+    // VALIDASI SOP 2: Pastikan koordinat valid (bukan koordinat kosong/rusak)
+    const lat = parseFloat(loc.latitude);
+    const lng = parseFloat(loc.longitude);
+    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return ctx.reply(
+            `❌ *KOORDINAT GPS TIDAK VALID!*\n\n` +
+            `Titik koordinat yang diterima tidak valid. Pastikan GPS pada HP Anda telah aktif dan memiliki sinyal yang cukup.\n\n` +
+            `👉 *Silakan coba tekan kembali tombol kirim lokasi di bawah keyboard.*`,
+            { parse_mode: 'Markdown' }
         );
     }
 
@@ -2955,8 +2971,6 @@ bot.on('location', async (ctx) => {
 
     // KASUS MODEM: Tangani Share Loc (bisa di langkah 1/awal atau di langkah akhir)
     if (session.category === 'MODEM') {
-        const lat = loc.latitude;
-        const lng = loc.longitude;
         const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
 
         session.latitude = lat;
@@ -3096,8 +3110,6 @@ bot.on('location', async (ctx) => {
                          session.step === 'waiting_location_odc';
 
     if (isOdcSession && (session.step === 'waiting_location_odc' || session.step === 'waiting_location' || !session.locationUrl)) {
-        const lat = loc.latitude;
-        const lng = loc.longitude;
         const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
 
         session.category = 'ODC';
@@ -3151,8 +3163,6 @@ bot.on('location', async (ctx) => {
         return ctx.reply("ℹ️ Lokasi diterima, namun Anda tidak sedang dalam proses input Tiang. Silakan pilih menu:", buildMainInlineMenu());
     }
 
-    const lat = loc.latitude;
-    const lng = loc.longitude;
     const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
 
     await ctx.reply(`📍 *Titik Lokasi GPS Tiang Diterima:* \`${lat}, ${lng}\`\n⏳ *Sedang memeriksa radius jarak tiang...*`, { parse_mode: 'Markdown' });
