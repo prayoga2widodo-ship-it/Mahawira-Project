@@ -538,7 +538,7 @@
                             </div>
                         </div>
 
-                        <!-- Action Toolbar: Download KML & GPS Saya -->
+                        <!-- Action Toolbar: Download KML & GPS Saya & Upload KML -->
                         <div class="flex items-center gap-2 flex-wrap">
                             <button type="button" onclick="locateUserPosition()" id="btnLocateUser"
                                 class="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
@@ -553,6 +553,14 @@
                                 <i class="fa-solid fa-layer-group text-slate-500 text-xs"></i>
                                 <span id="basemapLabel">Mode Satelit</span>
                             </button>
+
+                            <button type="button" onclick="triggerKmlFileInput()" id="btnUploadKml"
+                                class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs shadow-indigo-600/30 cursor-pointer"
+                                title="Unggah berkas .KML dari Google Earth atau GPS untuk ditampilkan di peta">
+                                <i class="fa-solid fa-file-arrow-up text-xs"></i>
+                                <span>Upload KML</span>
+                            </button>
+                            <input type="file" id="kmlFileInput" accept=".kml,.xml" class="hidden" onchange="handleKmlFileSelected(event)">
 
                             <button type="button" onclick="exportKmlFile()"
                                 class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs shadow-emerald-600/30 cursor-pointer"
@@ -608,17 +616,58 @@
                     </div>
                 </div>
 
+                <!-- Banner Info KML Terunggah (Muncul otomatis saat file KML diupload) -->
+                <div id="uploadedKmlStatusBar" class="hidden px-3.5 py-2.5 bg-indigo-50/90 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                    <div class="flex items-center gap-2 text-indigo-950 flex-wrap">
+                        <span class="w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+                        <span class="font-bold flex items-center gap-1.5 text-indigo-950">
+                            <i class="fa-solid fa-file-code text-indigo-600"></i>
+                            <span id="uploadedKmlFileName">File.kml</span>
+                        </span>
+                        <span class="text-indigo-300">|</span>
+                        <span class="text-indigo-800 font-semibold" id="uploadedKmlSummary">0 Titik, 0 Jalur Kabel</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <button type="button" onclick="zoomToUploadedKml()"
+                            class="px-2.5 py-1 bg-white hover:bg-indigo-100 text-indigo-700 font-bold rounded-md border border-indigo-200 transition text-[11px] flex items-center gap-1 shadow-2xs cursor-pointer"
+                            title="Fokuskan tampilan peta ke seluruh elemen KML yang diunggah">
+                            <i class="fa-solid fa-crosshairs text-indigo-600"></i>
+                            <span>Fokus KML</span>
+                        </button>
+                        <button type="button" onclick="toggleUploadedKmlVisibility()" id="btnToggleUploadedKml"
+                            class="px-2.5 py-1 bg-white hover:bg-indigo-100 text-indigo-700 font-bold rounded-md border border-indigo-200 transition text-[11px] flex items-center gap-1 shadow-2xs cursor-pointer"
+                            title="Sembunyikan atau tampilkan kembali layer KML di peta">
+                            <i class="fa-solid fa-eye-slash text-indigo-600"></i>
+                            <span>Sembunyikan</span>
+                        </button>
+                        <button type="button" onclick="saveAllUploadedKmlPointsToDb()" id="btnSaveKmlToDbToolbar"
+                            class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-2xs transition text-[11px] flex items-center gap-1 cursor-pointer"
+                            title="Simpan seluruh titik dari berkas KML ini ke database Evident Supabase">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>Simpan ke Database</span>
+                        </button>
+                        <button type="button" onclick="clearUploadedKml()"
+                            class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-md border border-rose-200 transition text-[11px] flex items-center gap-1 cursor-pointer"
+                            title="Hapus lapisan KML ini dari peta">
+                            <i class="fa-solid fa-trash-can"></i>
+                            <span>Hapus</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Canvas Peta Interaktif Leaflet -->
                 <div class="relative w-full">
                     <div id="kmlMapCanvas" class="w-full h-[520px] sm:h-[620px] bg-slate-100 z-10"></div>
 
                     <!-- Overlay Legend Panduan Warna -->
-                    <div class="absolute bottom-4 left-4 z-20 bg-white/95 backdrop-blur-xs p-2.5 rounded-xl border border-slate-200/80 shadow-md text-[10.5px] space-y-1.5 pointer-events-auto">
+                    <div class="absolute bottom-4 left-4 z-20 bg-white/95 backdrop-blur-xs p-2.5 rounded-xl border border-slate-200/80 shadow-md text-[10.5px] space-y-1.5 pointer-events-auto max-w-[210px]">
                         <span class="font-bold text-slate-700 block uppercase tracking-wider text-[9.5px]">Legenda Titik:</span>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">ODC Induk</span></div>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">ODP Jaringan</span></div>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">Tiang Fiber Optik</span></div>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-cyan-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">Modem Pelanggan</span></div>
+                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-indigo-600 border border-white shadow-2xs"></span> <span class="font-semibold text-slate-700">Titik KML Unggahan</span></div>
+                        <div class="flex items-center gap-2"><span class="w-3 h-0.5 bg-indigo-600 inline-block shadow-2xs"></span> <span class="font-semibold text-slate-700">Jalur Kabel FO (KML)</span></div>
                         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 border border-white shadow-2xs animate-pulse"></span> <span class="font-semibold text-slate-700">Lokasi Anda (GPS)</span></div>
                     </div>
                 </div>
@@ -866,9 +915,82 @@
         </div>
     </div>
 
+    <!-- Modal Pratinjau & Konfirmasi Upload KML -->
+    <div id="kmlUploadPreviewModal"
+        class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-base shadow-2xs">
+                        <i class="fa-solid fa-file-arrow-up"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Pratinjau Berkas KML Google Earth</h3>
+                        <p class="text-[10.5px] text-slate-500" id="kmlModalSubtitle">Deteksi titik &amp; jalur jaringan dari berkas</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('kmlUploadPreviewModal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Ringkasan Isi KML -->
+            <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 space-y-2 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-500 font-medium">Nama Berkas:</span>
+                    <span class="font-bold text-slate-900 font-mono text-[11px] truncate max-w-[220px]" id="kmlModalFileName">-</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-500 font-medium">Ukuran Berkas:</span>
+                    <span class="font-medium text-slate-700" id="kmlModalFileSize">-</span>
+                </div>
+                <div class="pt-2 border-t border-slate-200/60 grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-white p-2 rounded-lg border border-slate-200/70 shadow-2xs">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Titik (Point)</p>
+                        <p class="text-lg font-black text-indigo-600 mt-0.5" id="kmlModalPointCount">0</p>
+                    </div>
+                    <div class="bg-white p-2 rounded-lg border border-slate-200/70 shadow-2xs">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Jalur FO</p>
+                        <p class="text-lg font-black text-blue-600 mt-0.5" id="kmlModalLineCount">0</p>
+                    </div>
+                    <div class="bg-white p-2 rounded-lg border border-slate-200/70 shadow-2xs">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Area Poligon</p>
+                        <p class="text-lg font-black text-emerald-600 mt-0.5" id="kmlModalPolyCount">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pratinjau Elemen Terdeteksi -->
+            <div class="space-y-1.5">
+                <label class="block text-xs font-semibold text-slate-700">Elemen Terdeteksi Dalam Berkas:</label>
+                <div id="kmlModalItemsList" class="max-h-40 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                    <!-- Dynamic Items List -->
+                </div>
+            </div>
+
+            <!-- Tombol Aksi -->
+            <div class="pt-2 flex flex-col sm:flex-row justify-end gap-2 border-t border-slate-100">
+                <button type="button" onclick="closeModal('kmlUploadPreviewModal')"
+                    class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition">
+                    Batal
+                </button>
+                <button type="button" onclick="confirmShowKmlOnMap()"
+                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs shadow-indigo-600/30 cursor-pointer">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                    <span>Tampilkan di Peta</span>
+                </button>
+                <button type="button" onclick="saveAllUploadedKmlPointsToDb()" id="btnSaveKmlToDb"
+                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs shadow-emerald-600/30 cursor-pointer">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Simpan ke Database</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Application JavaScript Scripts (Cache-Busted to Ensure Instant Update) -->
     <script src="config.js?v=20261120_03"></script>
-    <script src="script.js?v=20261120_07"></script>
+    <script src="script.js?v=20261123_01"></script>
 </body>
 
 </html>

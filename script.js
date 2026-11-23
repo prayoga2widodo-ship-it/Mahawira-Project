@@ -3636,6 +3636,18 @@ let kmlUserLocationMarker = null;
 let activeKmlLayerFilter = 'all';
 let kmlMarkersList = [];
 
+// State Tambahan untuk Lapisan KML yang Diunggah Pengguna
+let uploadedKmlLayerGroup = null;
+let uploadedKmlData = {
+    fileName: '',
+    fileSize: 0,
+    points: [],
+    lines: [],
+    polygons: [],
+    bounds: []
+};
+let isUploadedKmlVisible = true;
+
 // Helper Ekstraksi Koordinat GPS (dari latitude/longitude langsung atau dari locationUrl)
 function extractCoordinates(item) {
     if (!item) return null;
@@ -4389,6 +4401,637 @@ function exportKmlFile() {
     URL.revokeObjectURL(url);
 }
 
+// =====================================================================
+// FITUR UNGGAH (UPLOAD) BERKAS KML GOOGLE EARTH KE DASHBOARD PETA GIS
+// =====================================================================
+
+// Pemicu Klik Input File KML
+function triggerKmlFileInput() {
+    const input = document.getElementById('kmlFileInput');
+    if (input) {
+        input.value = '';
+        input.click();
+    }
+}
+
+// Handler Saat Pengguna Memilih File KML dari Komputer / HP
+function handleKmlFileSelected(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.kml') && !lowerName.endsWith('.xml')) {
+        alert("Mohon pilih berkas dengan format .kml atau .xml Google Earth.");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        try {
+            processKmlContent(text, file.name, file.size);
+        } catch (err) {
+            console.error("Gagal memproses berkas KML:", err);
+            alert("Gagal membaca berkas KML: " + err.message);
+        }
+    };
+    reader.onerror = function() {
+        alert("Terjadi kesalahan saat membaca file dari penyimpanan lokal.");
+    };
+    reader.readAsText(file);
+}
+
+// Helper Parsing String Koordinat KML (Format: "lng,lat,alt lng,lat,alt ...")
+function parseKmlCoordString(str) {
+    if (!str) return [];
+    const tokens = str.trim().split(/\s+/);
+    const result = [];
+    tokens.forEach(tok => {
+        const parts = tok.split(',');
+        if (parts.length >= 2) {
+            const lng = parseFloat(parts[0].trim());
+            const lat = parseFloat(parts[1].trim());
+            const alt = parts[2] ? parseFloat(parts[2].trim()) : 0;
+            if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                result.push({ lat, lng, alt });
+            }
+        }
+    });
+    return result;
+}
+
+// Hitung Jarak Formula Haversine (Meter)
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Radius bumi dalam meter
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// Hitung Total Panjang Garis Kabel (LineString)
+function calculatePolylineLength(latlngs) {
+    if (!latlngs || latlngs.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < latlngs.length - 1; i++) {
+        const p1 = latlngs[i];
+        const p2 = latlngs[i + 1];
+        total += haversineDistance(p1[0], p1[1], p2[0], p2[1]);
+    }
+    return Math.round(total);
+}
+
+// Proses & Ekstraksi Seluruh Elemen Placemark dalam Dokumen KML
+function processKmlContent(kmlText, fileName, fileSize) {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(kmlText, "text/xml");
+
+    const parserError = xmlDoc.querySelector("parsererror");
+    if (parserError) {
+        throw new Error("Struktur XML berkas KML tidak valid atau mengalami kerusakan.");
+    }
+
+    const placemarks = xmlDoc.querySelectorAll("Placemark");
+    if (!placemarks || placemarks.length === 0) {
+        alert("Tidak ditemukan elemen <Placemark> di dalam berkas KML ini.");
+        return;
+    }
+
+    const points = [];
+    const lines = [];
+    const polygons = [];
+    const allBounds = [];
+
+    placemarks.forEach((pm, idx) => {
+        const nameEl = pm.querySelector("name");
+        const name = nameEl ? nameEl.textContent.trim() : `Placemark #${idx + 1}`;
+
+        const descEl = pm.querySelector("description");
+        const desc = descEl ? descEl.textContent.trim() : '';
+
+        // 1. Ekstraksi Point (Titik Perangkat)
+        const pointEl = pm.querySelector("Point");
+        if (pointEl) {
+            const coordEl = pointEl.querySelector("coordinates");
+            if (coordEl) {
+                const coords = parseKmlCoordString(coordEl.textContent);
+                if (coords.length > 0) {
+                    const c = coords[0];
+                    const upperText = (name + " " + desc).toUpperCase();
+                    let category = 'LAINNYA';
+                    if (upperText.includes('ODC')) category = 'ODC';
+                    else if (upperText.includes('ODP')) category = 'ODP';
+                    else if (upperText.includes('TIANG') || upperText.includes('POLE')) category = 'TIANG';
+                    else if (upperText.includes('MODEM') || upperText.includes('PELANGGAN') || upperText.includes('CUSTOMER')) category = 'MODEM';
+
+                    points.push({
+                        id: 'kml_pt_' + idx,
+                        name: name,
+                        description: desc,
+                        lat: c.lat,
+                        lng: c.lng,
+                        alt: c.alt,
+                        category: category
+                    });
+                    allBounds.push([c.lat, c.lng]);
+                }
+            }
+        }
+
+        // 2. Ekstraksi LineString (Jalur Kabel Fiber Optik)
+        const lineEl = pm.querySelector("LineString");
+        if (lineEl) {
+            const coordEl = lineEl.querySelector("coordinates");
+            if (coordEl) {
+                const coords = parseKmlCoordString(coordEl.textContent);
+                if (coords.length > 1) {
+                    const latlngs = coords.map(c => [c.lat, c.lng]);
+                    const lengthMeters = calculatePolylineLength(latlngs);
+                    lines.push({
+                        id: 'kml_ln_' + idx,
+                        name: name,
+                        description: desc,
+                        latlngs: latlngs,
+                        lengthMeters: lengthMeters
+                    });
+                    coords.forEach(c => allBounds.push([c.lat, c.lng]));
+                }
+            }
+        }
+
+        // 3. Ekstraksi Polygon (Area Jangkauan)
+        const polyEl = pm.querySelector("Polygon");
+        if (polyEl) {
+            const coordEl = polyEl.querySelector("coordinates");
+            if (coordEl) {
+                const coords = parseKmlCoordString(coordEl.textContent);
+                if (coords.length > 2) {
+                    const latlngs = coords.map(c => [c.lat, c.lng]);
+                    polygons.push({
+                        id: 'kml_pl_' + idx,
+                        name: name,
+                        description: desc,
+                        latlngs: latlngs
+                    });
+                    coords.forEach(c => allBounds.push([c.lat, c.lng]));
+                }
+            }
+        }
+    });
+
+    if (points.length === 0 && lines.length === 0 && polygons.length === 0) {
+        alert("Berkas KML berhasil dibaca, namun tidak ditemukan koordinat Geometri (Point / LineString / Polygon) yang valid.");
+        return;
+    }
+
+    uploadedKmlData = {
+        fileName: fileName,
+        fileSize: fileSize,
+        points: points,
+        lines: lines,
+        polygons: polygons,
+        bounds: allBounds
+    };
+
+    // Tampilkan Modal Pratinjau KML
+    showKmlUploadPreviewModal();
+}
+
+// Buka Modal Pratinjau KML yang Telah Di-parse
+function showKmlUploadPreviewModal() {
+    const modal = document.getElementById('kmlUploadPreviewModal');
+    if (!modal) {
+        renderUploadedKmlLayer();
+        return;
+    }
+
+    const elName = document.getElementById('kmlModalFileName');
+    const elSize = document.getElementById('kmlModalFileSize');
+    const elPts = document.getElementById('kmlModalPointCount');
+    const elLns = document.getElementById('kmlModalLineCount');
+    const elPolys = document.getElementById('kmlModalPolyCount');
+    const elList = document.getElementById('kmlModalItemsList');
+
+    if (elName) elName.textContent = uploadedKmlData.fileName;
+    if (elSize) elSize.textContent = (uploadedKmlData.fileSize / 1024).toFixed(1) + " KB";
+    if (elPts) elPts.textContent = uploadedKmlData.points.length;
+    if (elLns) elLns.textContent = uploadedKmlData.lines.length;
+    if (elPolys) elPolys.textContent = uploadedKmlData.polygons.length;
+
+    if (elList) {
+        elList.innerHTML = '';
+        const allItems = [
+            ...uploadedKmlData.points.map(p => ({ type: 'Titik ' + p.category, name: p.name, coords: `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` })),
+            ...uploadedKmlData.lines.map(l => ({ type: 'Jalur FO', name: l.name, coords: `${l.lengthMeters >= 1000 ? (l.lengthMeters / 1000).toFixed(2) + ' km' : l.lengthMeters + ' m'}` })),
+            ...uploadedKmlData.polygons.map(pl => ({ type: 'Poligon', name: pl.name, coords: 'Area' }))
+        ];
+
+        allItems.slice(0, 10).forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/60 text-[11px]';
+            row.innerHTML = `
+                <div class="truncate max-w-[200px]">
+                    <span class="font-bold text-slate-800">${escapeHtml(item.name)}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9.5px] px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200 font-semibold">${item.type}</span>
+                    <span class="font-mono text-slate-400 text-[10px]">${item.coords}</span>
+                </div>
+            `;
+            elList.appendChild(row);
+        });
+
+        if (allItems.length > 10) {
+            const more = document.createElement('p');
+            more.className = 'text-[10.5px] text-slate-400 text-center italic pt-1';
+            more.textContent = `...dan ${allItems.length - 10} elemen lainnya`;
+            elList.appendChild(more);
+        }
+    }
+
+    openModal('kmlUploadPreviewModal');
+}
+
+// Konfirmasi Tampilkan Lapisan KML ke Peta
+function confirmShowKmlOnMap() {
+    closeModal('kmlUploadPreviewModal');
+    renderUploadedKmlLayer();
+}
+
+// Render Seluruh Elemen KML yang Diunggah ke Canvas Peta Leaflet
+function renderUploadedKmlLayer() {
+    if (!kmlLeafletMap) {
+        initKmlMap();
+    }
+
+    if (!uploadedKmlLayerGroup) {
+        uploadedKmlLayerGroup = L.featureGroup().addTo(kmlLeafletMap);
+    } else {
+        uploadedKmlLayerGroup.clearLayers();
+        if (!kmlLeafletMap.hasLayer(uploadedKmlLayerGroup)) {
+            uploadedKmlLayerGroup.addTo(kmlLeafletMap);
+        }
+    }
+
+    isUploadedKmlVisible = true;
+
+    // 1. Render Jalur Kabel FO (LineString)
+    uploadedKmlData.lines.forEach(ln => {
+        const lenText = ln.lengthMeters >= 1000 ? `${(ln.lengthMeters / 1000).toFixed(2)} km` : `${ln.lengthMeters} meter`;
+        const polyline = L.polyline(ln.latlngs, {
+            color: '#4f46e5', // Indigo 600
+            weight: 4,
+            opacity: 0.85,
+            dashArray: '8, 6',
+            lineJoin: 'round'
+        });
+
+        const startPt = ln.latlngs[0];
+        const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${startPt[0]},${startPt[1]}`;
+
+        const popupHtml = `
+            <div class="p-2 space-y-2 max-w-[280px] text-slate-800">
+                <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                        <i class="fa-solid fa-route mr-1"></i>JALUR KABEL FO
+                    </span>
+                    <span class="text-[9.5px] font-mono text-indigo-700 font-bold">${lenText}</span>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(ln.name)}</h4>
+                    ${ln.description ? `<div class="mt-1 text-[10.5px] text-slate-600 max-h-24 overflow-y-auto bg-slate-50 p-1.5 rounded border border-slate-200/70">${escapeHtml(ln.description)}</div>` : ''}
+                </div>
+                <div class="pt-1">
+                    <a href="${navUrl}" target="_blank" rel="noopener noreferrer"
+                        class="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-diamond-turn-right text-xs"></i>
+                        <span>Navigasi ke Titik Awal Jalur</span>
+                    </a>
+                </div>
+            </div>
+        `;
+        polyline.bindPopup(popupHtml, { maxWidth: 300 });
+        uploadedKmlLayerGroup.addLayer(polyline);
+    });
+
+    // 2. Render Poligon Area
+    uploadedKmlData.polygons.forEach(pl => {
+        const polygon = L.polygon(pl.latlngs, {
+            color: '#6366f1',
+            fillColor: '#818cf8',
+            fillOpacity: 0.25,
+            weight: 2
+        });
+        const popupHtml = `
+            <div class="p-2 space-y-1.5 max-w-[260px] text-slate-800">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">AREA POLYGON</span>
+                <h4 class="text-xs font-bold text-slate-900">${escapeHtml(pl.name)}</h4>
+                ${pl.description ? `<p class="text-[10.5px] text-slate-600">${escapeHtml(pl.description)}</p>` : ''}
+            </div>
+        `;
+        polygon.bindPopup(popupHtml);
+        uploadedKmlLayerGroup.addLayer(polygon);
+    });
+
+    // 3. Render Titik Marker (Point)
+    uploadedKmlData.points.forEach(pt => {
+        let pinColor = '#4f46e5'; // Default indigo
+        let pinIcon = 'fa-map-pin';
+        let badgeBg = 'bg-indigo-100 text-indigo-800 border-indigo-200';
+
+        if (pt.category === 'ODC') {
+            pinColor = '#2563eb';
+            pinIcon = 'fa-server';
+            badgeBg = 'bg-blue-100 text-blue-800 border-blue-200';
+        } else if (pt.category === 'ODP') {
+            pinColor = '#16a34a';
+            pinIcon = 'fa-network-wired';
+            badgeBg = 'bg-green-100 text-green-800 border-green-200';
+        } else if (pt.category === 'TIANG') {
+            pinColor = '#d97706';
+            pinIcon = 'fa-tower-broadcast';
+            badgeBg = 'bg-amber-100 text-amber-800 border-amber-200';
+        } else if (pt.category === 'MODEM') {
+            pinColor = '#0891b2';
+            pinIcon = 'fa-house-signal';
+            badgeBg = 'bg-cyan-100 text-cyan-800 border-cyan-200';
+        }
+
+        const customMarkerHtml = `
+            <div class="custom-kml-marker" style="background-color: ${pinColor}; width: 28px; height: 28px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); border: 2px solid #ffffff; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
+                <i class="fa-solid ${pinIcon}" style="font-size: 11px;"></i>
+            </div>
+        `;
+
+        const leafletIcon = L.divIcon({
+            className: 'kml-pin-wrapper',
+            html: customMarkerHtml,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            popupAnchor: [0, -14]
+        });
+
+        const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${pt.lat},${pt.lng}`;
+        const popupHtml = `
+            <div class="p-2 space-y-2 max-w-[280px] text-slate-800">
+                <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}">
+                        ${pt.category} (KML)
+                    </span>
+                    <span class="text-[9.5px] font-mono text-slate-400">Unggahan</span>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(pt.name)}</h4>
+                    ${pt.description ? `<div class="mt-1 text-[10.5px] text-slate-600 max-h-24 overflow-y-auto bg-slate-50 p-1.5 rounded border border-slate-200/70">${escapeHtml(pt.description)}</div>` : ''}
+                </div>
+                <div class="bg-slate-50 p-2 rounded-lg border border-slate-200/80 space-y-1 text-[10px]">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-500"><i class="fa-solid fa-location-crosshairs mr-1 text-emerald-600"></i>Koordinat:</span>
+                        <span class="font-mono font-bold text-slate-700">${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}</span>
+                    </div>
+                </div>
+                <div class="pt-1 flex flex-col gap-1.5">
+                    <a href="${navUrl}" target="_blank" rel="noopener noreferrer"
+                        class="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-diamond-turn-right text-xs"></i>
+                        <span>Navigasi Rute (Google Maps)</span>
+                    </a>
+                    <button type="button" onclick="saveSingleKmlPointToDb('${pt.id}')"
+                        class="w-full py-1.5 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-cloud-arrow-up text-blue-600 text-xs"></i>
+                        <span>Simpan Titik Ini ke Evident</span>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        const marker = L.marker([pt.lat, pt.lng], { icon: leafletIcon })
+            .bindPopup(popupHtml, { maxWidth: 300 });
+
+        uploadedKmlLayerGroup.addLayer(marker);
+    });
+
+    // Update Status Bar di Peta
+    updateUploadedKmlStatusBar();
+
+    // Auto Zoom & Fit Bounds ke Seluruh Elemen KML
+    if (uploadedKmlData.bounds && uploadedKmlData.bounds.length > 0 && kmlLeafletMap) {
+        kmlLeafletMap.fitBounds(uploadedKmlData.bounds, { padding: [40, 40], maxZoom: 17 });
+    }
+}
+
+// Update Bilah Status Lapisan KML di Atas Peta
+function updateUploadedKmlStatusBar() {
+    const bar = document.getElementById('uploadedKmlStatusBar');
+    if (!bar) return;
+
+    if (!uploadedKmlData || (!uploadedKmlData.points.length && !uploadedKmlData.lines.length && !uploadedKmlData.polygons.length)) {
+        bar.classList.add('hidden');
+        return;
+    }
+
+    bar.classList.remove('hidden');
+    const elName = document.getElementById('uploadedKmlFileName');
+    const elSummary = document.getElementById('uploadedKmlSummary');
+    const btnToggle = document.getElementById('btnToggleUploadedKml');
+
+    if (elName) elName.textContent = uploadedKmlData.fileName || 'Berkas.kml';
+    if (elSummary) {
+        const parts = [];
+        if (uploadedKmlData.points.length > 0) parts.push(`${uploadedKmlData.points.length} Titik`);
+        if (uploadedKmlData.lines.length > 0) parts.push(`${uploadedKmlData.lines.length} Jalur Kabel FO`);
+        if (uploadedKmlData.polygons.length > 0) parts.push(`${uploadedKmlData.polygons.length} Area`);
+        elSummary.textContent = parts.join(' • ');
+    }
+
+    if (btnToggle) {
+        btnToggle.innerHTML = isUploadedKmlVisible ? `<i class="fa-solid fa-eye-slash text-indigo-600"></i> Sembunyikan` : `<i class="fa-solid fa-eye text-indigo-600"></i> Tampilkan`;
+    }
+}
+
+// Fokus Peta ke Lapisan KML
+function zoomToUploadedKml() {
+    if (kmlLeafletMap && uploadedKmlData.bounds && uploadedKmlData.bounds.length > 0) {
+        kmlLeafletMap.fitBounds(uploadedKmlData.bounds, { padding: [40, 40], maxZoom: 17 });
+    }
+}
+
+// Sembunyikan / Tampilkan Lapisan KML di Peta
+function toggleUploadedKmlVisibility() {
+    if (!kmlLeafletMap || !uploadedKmlLayerGroup) return;
+    const btn = document.getElementById('btnToggleUploadedKml');
+    if (isUploadedKmlVisible) {
+        kmlLeafletMap.removeLayer(uploadedKmlLayerGroup);
+        isUploadedKmlVisible = false;
+        if (btn) btn.innerHTML = `<i class="fa-solid fa-eye text-indigo-600"></i> Tampilkan`;
+    } else {
+        kmlLeafletMap.addLayer(uploadedKmlLayerGroup);
+        isUploadedKmlVisible = true;
+        if (btn) btn.innerHTML = `<i class="fa-solid fa-eye-slash text-indigo-600"></i> Sembunyikan`;
+    }
+}
+
+// Hapus Lapisan KML Unggahan dari Peta
+function clearUploadedKml() {
+    if (uploadedKmlLayerGroup && kmlLeafletMap) {
+        kmlLeafletMap.removeLayer(uploadedKmlLayerGroup);
+        uploadedKmlLayerGroup.clearLayers();
+    }
+    uploadedKmlData = {
+        fileName: '',
+        fileSize: 0,
+        points: [],
+        lines: [],
+        polygons: [],
+        bounds: []
+    };
+    const input = document.getElementById('kmlFileInput');
+    if (input) input.value = '';
+    updateUploadedKmlStatusBar();
+}
+
+// Simpan Semua Titik dari Berkas KML ke Database Evident Supabase
+async function saveAllUploadedKmlPointsToDb() {
+    if (!uploadedKmlData || !uploadedKmlData.points || uploadedKmlData.points.length === 0) {
+        alert("Tidak ada titik (Point) dari berkas KML yang dapat disimpan ke database.");
+        return;
+    }
+
+    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') {
+        alert("Akses ditolak: Anda tidak memiliki izin untuk menyimpan data ke database.");
+        return;
+    }
+
+    const confirmMsg = `Apakah Anda yakin ingin menyimpan ${uploadedKmlData.points.length} titik dari file KML "${uploadedKmlData.fileName}" ke database Evident Supabase?`;
+    if (!confirm(confirmMsg)) return;
+
+    const btn = document.getElementById('btnSaveKmlToDb');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...`;
+    }
+
+    try {
+        const uploaderEmail = (currentUser && currentUser.email) ? currentUser.email : 'Import KML';
+        const currentDate = new Date().toLocaleString('id-ID');
+
+        const records = uploadedKmlData.points.map(pt => {
+            return {
+                name: pt.name || 'Titik KML',
+                size: '0 KB',
+                category: pt.category || 'LAINNYA',
+                device_label: pt.name,
+                latitude: pt.lat,
+                longitude: pt.lng,
+                location_url: `https://www.google.com/maps?q=${pt.lat},${pt.lng}`,
+                uploader: uploaderEmail,
+                date: currentDate,
+                status: 'Verified',
+                file_url: null
+            };
+        });
+
+        const { data, error } = await supabaseClient.from('evidents').insert(records).select();
+        if (error) throw error;
+
+        // Tambahkan ke sampleData lokal agar langsung tampil di tabel dan peta utama
+        if (data && data.length > 0) {
+            data.forEach(row => {
+                sampleData.unshift({
+                    id: row.id,
+                    name: row.name,
+                    size: row.size,
+                    category: row.category,
+                    deviceLabel: row.device_label,
+                    latitude: row.latitude,
+                    longitude: row.longitude,
+                    locationUrl: row.location_url,
+                    uploader: row.uploader,
+                    date: row.date,
+                    status: row.status,
+                    fileUrl: row.file_url
+                });
+            });
+        }
+
+        updateKmlStats();
+        renderKmlPoints(activeKmlLayerFilter);
+        closeModal('kmlUploadPreviewModal');
+
+        alert(`Sukses! Sebanyak ${data ? data.length : records.length} titik dari berkas KML berhasil disimpan ke database Evident Supabase.`);
+    } catch (err) {
+        console.error("Gagal menyimpan titik KML ke database:", err);
+        alert("Gagal menyimpan titik KML ke database: " + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+// Simpan Titik Tunggal KML ke Database Evident Supabase
+async function saveSingleKmlPointToDb(pointId) {
+    if (!uploadedKmlData || !uploadedKmlData.points) return;
+    const pt = uploadedKmlData.points.find(p => p.id === pointId);
+    if (!pt) return;
+
+    if (currentUserRole !== 'owner' && currentUserRole !== 'editor') {
+        alert("Akses ditolak: Anda tidak memiliki izin untuk menyimpan data ke database.");
+        return;
+    }
+
+    try {
+        const uploaderEmail = (currentUser && currentUser.email) ? currentUser.email : 'Import KML';
+        const currentDate = new Date().toLocaleString('id-ID');
+
+        const record = {
+            name: pt.name || 'Titik KML',
+            size: '0 KB',
+            category: pt.category || 'LAINNYA',
+            device_label: pt.name,
+            latitude: pt.lat,
+            longitude: pt.lng,
+            location_url: `https://www.google.com/maps?q=${pt.lat},${pt.lng}`,
+            uploader: uploaderEmail,
+            date: currentDate,
+            status: 'Verified',
+            file_url: null
+        };
+
+        const { data, error } = await supabaseClient.from('evidents').insert([record]).select();
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+            sampleData.unshift({
+                id: data[0].id,
+                name: data[0].name,
+                size: data[0].size,
+                category: data[0].category,
+                deviceLabel: data[0].device_label,
+                latitude: data[0].latitude,
+                longitude: data[0].longitude,
+                locationUrl: data[0].location_url,
+                uploader: data[0].uploader,
+                date: data[0].date,
+                status: data[0].status,
+                fileUrl: data[0].file_url
+            });
+        }
+
+        updateKmlStats();
+        renderKmlPoints(activeKmlLayerFilter);
+
+        alert(`Titik "${pt.name}" berhasil disimpan ke database Evident.`);
+    } catch (err) {
+        alert("Gagal menyimpan titik ke database: " + err.message);
+    }
+}
+
 // Ekspos Fungsi ke Window Global agar dapat diakses dari Elemen HTML
 window.switchMainView = switchMainView;
 window.toggleMapBasemap = toggleMapBasemap;
@@ -4399,3 +5042,11 @@ window.clearKmlSearch = clearKmlSearch;
 window.locateUserPosition = locateUserPosition;
 window.updateKmlStats = updateKmlStats;
 window.renderKmlPoints = renderKmlPoints;
+window.triggerKmlFileInput = triggerKmlFileInput;
+window.handleKmlFileSelected = handleKmlFileSelected;
+window.confirmShowKmlOnMap = confirmShowKmlOnMap;
+window.zoomToUploadedKml = zoomToUploadedKml;
+window.toggleUploadedKmlVisibility = toggleUploadedKmlVisibility;
+window.clearUploadedKml = clearUploadedKml;
+window.saveAllUploadedKmlPointsToDb = saveAllUploadedKmlPointsToDb;
+window.saveSingleKmlPointToDb = saveSingleKmlPointToDb;
