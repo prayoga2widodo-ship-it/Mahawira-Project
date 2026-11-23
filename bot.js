@@ -215,61 +215,121 @@ function cleanCaptionForLabel(text) {
         .trim();
 }
 
+// Helper: Menentukan step berikutnya untuk ODC dan ODP secara berurutan dan wajib (Anti-Skip)
+function getOdcOdpNextStep(completedTypes = [], hasLocation = false) {
+    const done = Array.isArray(completedTypes) ? completedTypes : [];
+    if (!hasLocation) {
+        return {
+            step: 'waiting_location',
+            type: 'LOCATION',
+            name: 'Share Loc GPS',
+            btnText: '📍 1. Share Loc GPS',
+            desc: 'Bagikan titik lokasi GPS fisik perangkat di lapangan (Wajib melalui tombol bot).'
+        };
+    }
+    if (!done.includes('TAMPAK LUAR')) {
+        return {
+            step: 'waiting_photo',
+            type: 'TAMPAK LUAR',
+            name: 'Foto 1: Tampak Luar / Depan',
+            btnText: '🚪 2. Tampak Luar',
+            desc: 'Foto fisik box/pintu luar perangkat dalam keadaan tertutup rapi dan utuh.'
+        };
+    }
+    if (!done.includes('TAMPAK DALAM')) {
+        return {
+            step: 'waiting_photo',
+            type: 'TAMPAK DALAM',
+            name: 'Foto 2: Tampak Dalam',
+            btnText: '📦 3. Tampak Dalam',
+            desc: 'Foto bagian dalam perangkat (baki, tray, splitter, manajemen kabel rapi).'
+        };
+    }
+    if (!done.includes('REDAMAN')) {
+        return {
+            step: 'waiting_photo',
+            type: 'REDAMAN',
+            name: 'Foto 3: Redaman (OPM)',
+            btnText: '📟 4. Foto Redaman',
+            desc: 'Foto angka hasil ukur redaman di layar OPM (-dBm) yang tajam dan terbaca.'
+        };
+    }
+    if (!done.includes('LABEL')) {
+        return {
+            step: 'waiting_photo',
+            type: 'LABEL',
+            name: 'Foto 4: Label Stiker',
+            btnText: '🏷 5. Foto Label',
+            desc: 'Foto stiker penamaan label perangkat yang jelas dan tidak blur/goyang.'
+        };
+    }
+    return {
+        step: 'COMPLETED',
+        type: 'DONE',
+        name: 'Semua Step Lengkap 100%',
+        btnText: '🏁 SELESAI / DONE'
+    };
+}
+
 function buildPhotoTypeMenu(category, label, completedTypes = [], hasLocation = false) {
     const done = Array.isArray(completedTypes) ? completedTypes : [];
-    const mark = (t) => done.includes(t) ? ' ✅' : '';
-    const totalDone = done.length;
-
-    const rows = [];
     const catUp = (category || '').toUpperCase();
     const lblUp = (label || '').toUpperCase();
     const isOdp = catUp === 'ODP' || lblUp.startsWith('ODP');
     const isOdc = !isOdp && (catUp.startsWith('ODC') || lblUp.startsWith('ODC'));
+    const rows = [];
 
-    if (isOdc) {
-        rows.push([
-            Markup.button.callback(`📍 Share Loc ODC${hasLocation ? ' ✅' : ' (Wajib)'}`, 'action_odc_shareloc')
-        ]);
-        rows.push([
-            Markup.button.callback(`🚪 1. Tampak Luar / Depan${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
-            Markup.button.callback(`📦 2. Tampak Dalam${mark('TAMPAK DALAM')}`, 'action_type:TAMPAK DALAM')
-        ]);
-        rows.push([
-            Markup.button.callback(`📟 3. Foto Redaman${mark('REDAMAN')}`, 'action_type:REDAMAN'),
-            Markup.button.callback(`🏷 4. Foto Label${mark('LABEL')}`, 'action_type:LABEL')
-        ]);
-    } else if (isOdp) {
-        rows.push([
-            Markup.button.callback(`📍 Share Loc ODP${hasLocation ? ' ✅' : ' (Wajib)'}`, 'action_odp_shareloc')
-        ]);
-        rows.push([
-            Markup.button.callback(`🚪 1. Tampak Luar / Depan${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
-            Markup.button.callback(`📦 2. Tampak Dalam${mark('TAMPAK DALAM')}`, 'action_type:TAMPAK DALAM')
-        ]);
-        rows.push([
-            Markup.button.callback(`📟 3. Foto Redaman${mark('REDAMAN')}`, 'action_type:REDAMAN'),
-            Markup.button.callback(`🏷 4. Foto Label${mark('LABEL')}`, 'action_type:LABEL')
-        ]);
+    const hasLuar = done.includes('TAMPAK LUAR');
+    const hasDalam = done.includes('TAMPAK DALAM');
+    const hasRedaman = done.includes('REDAMAN');
+    const hasLabel = done.includes('LABEL');
+
+    // 1. Share Loc Button
+    const shareLocBtnText = hasLocation
+        ? `📍 1. Share Loc GPS ✅ Selesai`
+        : `📍 1. Share Loc GPS 👉 (WAJIB SEKARANG)`;
+    rows.push([
+        Markup.button.callback(shareLocBtnText, isOdc ? 'action_odc_shareloc' : 'action_odp_shareloc')
+    ]);
+
+    // 2. Tampak Luar & 3. Tampak Dalam
+    const luarText = hasLuar
+        ? `🚪 2. Tampak Luar ✅`
+        : (!hasLocation ? `🔒 2. Tampak Luar` : `🚪 2. Tampak Luar 👉`);
+
+    const dalamText = hasDalam
+        ? `📦 3. Tampak Dalam ✅`
+        : (!hasLuar ? `🔒 3. Tampak Dalam` : `📦 3. Tampak Dalam 👉`);
+
+    rows.push([
+        Markup.button.callback(luarText, 'action_type:TAMPAK LUAR'),
+        Markup.button.callback(dalamText, 'action_type:TAMPAK DALAM')
+    ]);
+
+    // 4. Redaman & 5. Label
+    const redamanText = hasRedaman
+        ? `📟 4. Foto Redaman ✅`
+        : (!hasDalam ? `🔒 4. Foto Redaman` : `📟 4. Foto Redaman 👉`);
+
+    const labelText = hasLabel
+        ? `🏷 5. Foto Label ✅`
+        : (!hasRedaman ? `🔒 5. Foto Label` : `🏷 5. Foto Label 👉`);
+
+    rows.push([
+        Markup.button.callback(redamanText, 'action_type:REDAMAN'),
+        Markup.button.callback(labelText, 'action_type:LABEL')
+    ]);
+
+    // Tombol Status Selesai
+    const allDone = hasLocation && hasLuar && hasDalam && hasRedaman && hasLabel;
+    const countDone = (hasLocation ? 1 : 0) + done.length;
+    if (allDone) {
+        rows.push([Markup.button.callback('🏁 SELESAI / DONE (Unit 100% Lengkap) 🎉', 'action_finish_device')]);
     } else {
-        rows.push([
-            Markup.button.callback(`🚪 1. Tampak Luar${mark('TAMPAK LUAR')}`, 'action_type:TAMPAK LUAR'),
-            Markup.button.callback(`📦 2. Tampak Dalam${mark('TAMPAK DALAM')}`, 'action_type:TAMPAK DALAM')
-        ]);
-        rows.push([
-            Markup.button.callback(`📟 3. Foto Redaman${mark('REDAMAN')}`, 'action_type:REDAMAN'),
-            Markup.button.callback(`🏷 4. Foto Label${mark('LABEL')}`, 'action_type:LABEL')
-        ]);
+        rows.push([Markup.button.callback(`⏳ Belum Selesai (${countDone}/5 Step Wajib)`, 'action_finish_device')]);
     }
-
-    // Tombol SELESAI / DONE selalu tersedia dan menonjol
-    const doneBtnText = totalDone >= 4
-        ? `🏁 SELESAI / DONE (4/4 Foto Lengkap) 🎉`
-        : totalDone > 0
-            ? `🏁 SELESAI / DONE (${totalDone}/4 Terupload)`
-            : `🏁 SELESAI / DONE (Selesai Unit Ini)`;
-
-    rows.push([Markup.button.callback(doneBtnText, 'action_finish_device')]);
     rows.push([Markup.button.callback('❌ Batalkan Sesi', 'action_cancel')]);
+
     return Markup.inlineKeyboard(rows);
 }
 
@@ -1246,9 +1306,9 @@ async function saveEvidentToDatabase(ctx, recordData) {
     let progressNote = '';
     if (recordData.baseLabel) {
         if (completed.length >= 4) {
-            progressNote = `\n🎉 *SEMUA 4 FOTO TELAH LENGKAP!*\n👉 Silakan klik tombol **[🏁 SELESAI / DONE]** di bawah untuk menutup sesi unit ini.\n`;
+            progressNote = `\n🎉 *SEMUA 4 FOTO TELAH LENGKAP!*\n👉 Unit ini sudah lengkap 100% dan tersimpan aman di sistem.\n`;
         } else {
-            progressNote = `\n📸 *Progres Foto Unit Ini:* ${completed.length}/4 Foto Terupload.\n👉 Silakan klik jenis foto berikutnya atau tekan **[🏁 SELESAI / DONE]**:\n`;
+            progressNote = `\n📸 *Progres Evident Unit Ini:* ${completed.length}/4 Foto Terupload.\n`;
         }
     }
 
@@ -1263,22 +1323,66 @@ async function saveEvidentToDatabase(ctx, recordData) {
         progressNote + `\n` +
         `✨ *Data dan foto otomatis masuk ke folder kategori ${recordData.category} di Web Dashboard.*`;
 
-    let buttons;
-    if (recordData.baseLabel) {
-        const isOdpRecord = (recordData.baseLabel || '').toUpperCase().startsWith('ODP') || Boolean(recordData.odpReference);
-        const menuCategory = isOdpRecord ? 'ODP' : recordData.category;
+    await ctx.reply(successMsg, { parse_mode: 'Markdown' });
+
+    // PENGATURAN STEP BERIKUTNYA SECARA OTOMATIS & BERURUTAN (ANTI-SKIP)
+    const chatId = ctx.chat.id.toString();
+    const session = getSession(chatId);
+
+    if (recordData.baseLabel && (recordData.category === 'ODC' || recordData.category === 'ODP' || (recordData.baseLabel || '').toUpperCase().startsWith('ODP'))) {
         const hasLocation = Boolean(recordData.locationUrl || (recordData.latitude && recordData.longitude));
-        buttons = buildPhotoTypeMenu(menuCategory, recordData.baseLabel, recordData.completedTypes || [], hasLocation);
-    } else {
-        buttons = Markup.inlineKeyboard([
-            [
-                Markup.button.callback('📤 Upload Evident Lain', 'action_open_upload'),
-                Markup.button.callback('📊 Cek Status', 'action_open_status')
-            ]
-        ]);
+        const next = getOdcOdpNextStep(completed, hasLocation);
+
+        if (next.step === 'COMPLETED') {
+            await ctx.reply(
+                `🎉 *SELAMAT! SELURUH EVIDENT ${recordData.category} SELESAI 100% LENGKAP!*\n\n` +
+                `🏷 *Label Perangkat:* \`${recordData.baseLabel}\`\n` +
+                `• 📍 Share Loc GPS: ✅ Selesai\n` +
+                `• 🚪 Foto 1 (Tampak Luar): ✅ Selesai\n` +
+                `• 📦 Foto 2 (Tampak Dalam): ✅ Selesai\n` +
+                `• 📟 Foto 3 (Redaman OPM): ✅ Selesai\n` +
+                `• 🏷 Foto 4 (Label Stiker): ✅ Selesai\n\n` +
+                `📂 *Seluruh data koordinat GPS dan 4 foto telah tersimpan aman di Web Dashboard.*\n\n` +
+                `👇 *Silakan pilih menu untuk input perangkat berikutnya:*`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([
+                        [
+                            Markup.button.callback('📦 Input ODC Baru', 'start_odc'),
+                            Markup.button.callback('🛜 Input ODP Baru', 'start_odp')
+                        ],
+                        [
+                            Markup.button.callback('🪵 Input Tiang Baru', 'start_tiang'),
+                            Markup.button.callback('💻 Input Modem Baru', 'start_modem')
+                        ],
+                        [Markup.button.callback('📊 Cek Status Evident', 'action_open_status')]
+                    ])
+                }
+            );
+            clearSession(chatId);
+            return true;
+        } else {
+            // Wajibkan step foto berikutnya secara berurutan
+            session.category = recordData.category;
+            session.deviceLabel = recordData.baseLabel;
+            session.photoType = next.type;
+            session.step = 'waiting_photo';
+
+            const stepNumber = completed.length === 1 ? '4/6' : (completed.length === 2 ? '5/6' : '6/6');
+            await ctx.reply(
+                `👉 *LANGKAH ${stepNumber}: SEKARANG AMBIL / KIRIMKAN ${next.name.toUpperCase()}*\n\n` +
+                `💡 *Keterangan SOP:* ${next.desc}\n` +
+                `⚠️ *Step ini wajib dilakukan secara berurutan dan tidak boleh di-skip.*\n\n` +
+                `📸 *Silakan kirimkan foto ${next.name} sekarang:*`,
+                {
+                    parse_mode: 'Markdown',
+                    ...buildPhotoTypeMenu(recordData.category, recordData.baseLabel, completed, hasLocation)
+                }
+            );
+            return true;
+        }
     }
 
-    await ctx.reply(successMsg, { parse_mode: 'Markdown', ...buttons });
     return true;
 }
 
@@ -1299,33 +1403,23 @@ async function startOdcFlow(ctx, prefilledLabel = null, specificType = null) {
         const check = analyzeOdcLabel(prefilledLabel);
         session.deviceLabel = check.valid ? check.formatted : prefilledLabel;
         session.completedTypes = [];
-
-        if (specificType) {
-            session.photoType = specificType;
-            session.step = 'waiting_photo';
-            return ctx.reply(
-                `📦 *INPUT EVIDENT ODC (${specificType})*\n\n` +
-                `🏷 *Label ODC:* \`${session.deviceLabel}\`\n` +
-                `📷 *Jenis Foto:* *${specificType}*\n\n` +
-                `📸 *Silakan kirimkan FOTO ${specificType} sekarang!*\n` +
-                `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.`,
-                { parse_mode: 'Markdown' }
-            );
-        }
-
-        session.step = 'waiting_photo_type';
+        session.step = 'waiting_location_odc';
         session.photoType = null;
+        session.pendingPhoto = null;
+
         return ctx.reply(
             `📦 *EVIDENT ODC:* \`${session.deviceLabel}\`\n\n` +
-            `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-            `1️⃣ 🚪 *Tampak Luar:* Foto pintu/fisik luar ODC tertutup\n` +
-            `2️⃣ 📦 *Tampak Dalam:* Foto bagian dalam baki/tray/splitter\n` +
-            `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-            `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODC\n\n` +
-            `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+            `📍 *LANGKAH 2/6: WAJIB BAGIKAN LOKASI GPS (SHARE LOC) ODC!*\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODC dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+            `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+            `👉 *Tekan tombol "📍 Kirim Lokasi GPS ODC Sekarang" di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
-                ...buildPhotoTypeMenu('ODC', session.deviceLabel)
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
             }
         );
     }
@@ -1339,11 +1433,14 @@ async function startOdcFlow(ctx, prefilledLabel = null, specificType = null) {
     await ctx.reply(
         `📦 *INPUT DATA EVIDENT ODC (Optical Distribution Cabinet)*${extraHint}\n\n` +
         `⚠️ *Aturan SOP:* ODC adalah induk jaringan dan wajib diinput terlebih dahulu sebelum ODP.\n\n` +
-        `👉 *Ketikkan Nama / Label ODC Anda sekarang:*\n` +
+        `👉 *Langkah 1/6: Ketikkan Nama / Label ODC Anda sekarang:*\n` +
         `📌 *Format Wajib:* \`ODC-(WILAYAH) (NO_ODC)\`\n` +
         `💡 *Contoh Benar:* \`ODC-SKD 01\`, \`ODC-SKD 001\`, \`ODC-WNJ 01\`, \`ODC-CHSN 01\`\n\n` +
         `_(Ketik /batal jika ingin membatalkan)_`,
-        { parse_mode: 'Markdown' }
+        {
+            parse_mode: 'Markdown',
+            ...Markup.removeKeyboard()
+        }
     );
 }
 
@@ -1385,35 +1482,24 @@ async function startOdpFlow(ctx, prefilledLabel = null, specificType = null) {
             session.deviceLabel = check.formattedOdp;
             session.odcReference = check.expectedOdc;
             session.completedTypes = [];
-
-            if (specificType) {
-                session.photoType = specificType;
-                session.step = 'waiting_photo';
-                return ctx.reply(
-                    `🛜 *INPUT EVIDENT ODP (${specificType})*\n\n` +
-                    `🏷 *Label ODP:* \`${session.deviceLabel}\`\n` +
-                    `🔗 *Induk ODC:* \`${session.odcReference}\`\n` +
-                    `📷 *Jenis Foto:* *${specificType}*\n\n` +
-                    `📸 *Silakan kirimkan FOTO ${specificType} sekarang!*\n` +
-                    `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.`,
-                    { parse_mode: 'Markdown' }
-                );
-            }
-
-            session.step = 'waiting_photo_type';
+            session.step = 'waiting_location_odp';
             session.photoType = null;
+            session.pendingPhoto = null;
+
             return ctx.reply(
                 `🛜 *EVIDENT ODP:* \`${session.deviceLabel}\`\n` +
-                `🔗 *Induk ODC:* \`${session.odcReference}\`\n\n` +
-                `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-                `1️⃣ 🚪 *Tampak Luar:* Foto fisik box luar ODP tertutup\n` +
-                `2️⃣ 📦 *Tampak Dalam:* Foto bagian dalam baki/tray/konektor\n` +
-                `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-                `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODP\n\n` +
-                `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+                `🔗 *Induk ODC:* \`${session.odcReference}\` (Aktif di database)\n\n` +
+                `📍 *LANGKAH 2/6: WAJIB BAGIKAN LOKASI GPS (SHARE LOC) ODP!*\n\n` +
+                `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+                `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODP dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+                `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+                `👉 *Tekan tombol "📍 Kirim Lokasi GPS ODP Sekarang" di bawah keyboard:*`,
                 {
                     parse_mode: 'Markdown',
-                    ...buildPhotoTypeMenu('ODP', session.deviceLabel)
+                    ...Markup.keyboard([
+                        [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
+                        ['❌ Batalkan Sesi']
+                    ]).resize()
                 }
             );
         }
@@ -1431,11 +1517,14 @@ async function startOdpFlow(ctx, prefilledLabel = null, specificType = null) {
         `⚠️ *ATURAN PENAMAAN & VALIDASI:*\n` +
         `1. Wilayah & No ODC pada ODP **WAJIB LURUS** dengan ODC induknya!\n` +
         `2. ODC induk **WAJIB SUDAH TERDAFTAR DI DATABASE**. ODP tidak bisa diinput jika ODC belum ada!\n\n` +
-        `👉 *Ketikkan Nama / Label ODP Anda sekarang:*\n` +
+        `👉 *Langkah 1/6: Ketikkan Nama / Label ODP Anda sekarang:*\n` +
         `📌 *Format Wajib:* \`ODP-(WILAYAH) (NO_ODC)/(NO_ODP)\`\n` +
         `💡 *Contoh Benar:* \`ODP-SKD 01/01\`, \`ODP-SKD 001/001\`, \`ODP-WNJ 01/01\`\n\n` +
         `_(Ketik /batal jika ingin membatalkan)_`,
-        { parse_mode: 'Markdown' }
+        {
+            parse_mode: 'Markdown',
+            ...Markup.removeKeyboard()
+        }
     );
 }
 
@@ -1922,22 +2011,76 @@ bot.action('action_cancel', async (ctx) => {
     }
 });
 
-// ===== TAMBAHAN BARU: Handler tombol ✅ SELESAI per perangkat ODC/ODP =====
+// ===== Handler tombol ✅ SELESAI per perangkat ODC/ODP (Wajib Lengkap, Anti-Skip) =====
 bot.action('action_finish_device', async (ctx) => {
-    await ctx.answerCbQuery('✅ Sesi perangkat ditutup');
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
 
+    const done = Array.isArray(session.completedTypes) ? session.completedTypes : [];
+    const hasLocation = Boolean(session.locationUrl || (session.latitude && session.longitude));
     const label = session.deviceLabel || '-';
     const cat = session.category || '-';
-    const done = (session.completedTypes || []).length;
 
+    if (cat === 'ODC' || cat === 'ODP') {
+        const hasLuar = done.includes('TAMPAK LUAR');
+        const hasDalam = done.includes('TAMPAK DALAM');
+        const hasRedaman = done.includes('REDAMAN');
+        const hasLabel = done.includes('LABEL');
+        const allDone = hasLocation && hasLuar && hasDalam && hasRedaman && hasLabel;
+
+        if (!allDone) {
+            await ctx.answerCbQuery('🚫 Belum selesai! Selesaikan semua step terlebih dahulu.', { show_alert: true });
+            return ctx.reply(
+                `🚫 *PERANGKAT BELUM BISA DISELESAIKAN!*\n\n` +
+                `Sesuai SOP PT Mahawira Nusantara Grup, seluruh step **WAJIB** diselesaikan secara berurutan dan tidak boleh di-skip.\n\n` +
+                `🏷 *Perangkat:* \`${label}\` (${cat})\n\n` +
+                `📋 *Status Step Saat Ini:*\n` +
+                `• 📍 Share Loc GPS: ${hasLocation ? '✅ Selesai' : '❌ Belum Dilakukan (WAJIB)'}\n` +
+                `• 🚪 Foto 1 (Tampak Luar): ${hasLuar ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n` +
+                `• 📦 Foto 2 (Tampak Dalam): ${hasDalam ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n` +
+                `• 📟 Foto 3 (Redaman OPM): ${hasRedaman ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n` +
+                `• 🏷 Foto 4 (Label Stiker): ${hasLabel ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n\n` +
+                `👉 *Silakan selesaikan step yang masih kurang!*`,
+                {
+                    parse_mode: 'Markdown',
+                    ...buildPhotoTypeMenu(cat, label, done, hasLocation)
+                }
+            );
+        }
+    }
+
+    if (cat === 'TIANG') {
+        if (!session.deviceLabel || !session.locationUrl) {
+            await ctx.answerCbQuery('🚫 Evident Tiang belum lengkap!', { show_alert: true });
+            return ctx.reply(
+                `🚫 *EVIDENT TIANG BELUM LENGKAP!*\n\n` +
+                `Sesuai SOP, tiang wajib memiliki:\n` +
+                `1. Label Tiang: ${session.deviceLabel ? '✅' : '❌'}\n` +
+                `2. Foto Evident Tiang: ${session.pendingPhoto ? '✅' : '❌'}\n` +
+                `3. Share Loc GPS: ${session.locationUrl ? '✅' : '❌'}\n\n` +
+                `👉 *Silakan selesaikan step yang masih kurang!*`
+            );
+        }
+    }
+
+    if (cat === 'MODEM') {
+        if (!session.locationUrl || !session.customerId || !session.modemSn) {
+            await ctx.answerCbQuery('🚫 Evident Modem belum lengkap!', { show_alert: true });
+            return ctx.reply(
+                `🚫 *EVIDENT MODEM BELUM LENGKAP!*\n\n` +
+                `Sesuai SOP, seluruh alur input modem (Share Loc, Label ODP, ID, Nama, SN, Foto Depan, Foto Belakang) wajib diselesaikan secara berurutan.`
+            );
+        }
+    }
+
+    await ctx.answerCbQuery('✅ Sesi perangkat berhasil diselesaikan');
     clearSession(chatId);
 
     const finishText =
         `✅ *SELESAI INPUT EVIDENT ${cat}*\n\n` +
         `🏷 *Label Perangkat:* \`${label}\`\n` +
-        `📸 *Jenis Foto Terupload:* *${done} / 4*\n\n` +
+        `📸 *Jenis Foto Terupload:* *${done.length} / 4*\n` +
+        `📍 *Titik Lokasi GPS:* ✅ Tersimpan\n\n` +
         `✨ Semua data sudah tersimpan di Dashboard EvidentVault.\n\n` +
         `Silakan pilih menu untuk input perangkat berikutnya:`;
 
@@ -1945,6 +2088,10 @@ bot.action('action_finish_device', async (ctx) => {
         [
             Markup.button.callback('📦 Input ODC Baru', 'start_odc'),
             Markup.button.callback('🛜 Input ODP Baru', 'start_odp')
+        ],
+        [
+            Markup.button.callback('🪵 Input Tiang Baru', 'start_tiang'),
+            Markup.button.callback('💻 Input Modem Baru', 'start_modem')
         ],
         [
             Markup.button.callback('📊 Cek Status', 'action_open_status'),
@@ -1964,16 +2111,64 @@ bot.command(['done', 'selesai'], async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
 
+    const done = Array.isArray(session.completedTypes) ? session.completedTypes : [];
+    const hasLocation = Boolean(session.locationUrl || (session.latitude && session.longitude));
     const label = session.deviceLabel || '-';
     const cat = session.category || '-';
-    const done = (session.completedTypes || []).length;
+
+    if (cat === 'ODC' || cat === 'ODP') {
+        const hasLuar = done.includes('TAMPAK LUAR');
+        const hasDalam = done.includes('TAMPAK DALAM');
+        const hasRedaman = done.includes('REDAMAN');
+        const hasLabel = done.includes('LABEL');
+        const allDone = hasLocation && hasLuar && hasDalam && hasRedaman && hasLabel;
+
+        if (!allDone) {
+            return ctx.reply(
+                `🚫 *PERANGKAT BELUM BISA DISELESAIKAN!*\n\n` +
+                `Sesuai SOP, seluruh step **WAJIB** diselesaikan secara berurutan dan tidak boleh di-skip.\n\n` +
+                `🏷 *Perangkat:* \`${label}\` (${cat})\n\n` +
+                `📋 *Status Step Saat Ini:*\n` +
+                `• 📍 Share Loc GPS: ${hasLocation ? '✅ Selesai' : '❌ Belum Dilakukan (WAJIB)'}\n` +
+                `• 🚪 Foto 1 (Tampak Luar): ${hasLuar ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n` +
+                `• 📦 Foto 2 (Tampak Dalam): ${hasDalam ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n` +
+                `• 📟 Foto 3 (Redaman OPM): ${hasRedaman ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n` +
+                `• 🏷 Foto 4 (Label Stiker): ${hasLabel ? '✅ Selesai' : '❌ Belum Diupload (WAJIB)'}\n\n` +
+                `👉 *Silakan selesaikan step yang masih kurang!*`,
+                {
+                    parse_mode: 'Markdown',
+                    ...buildPhotoTypeMenu(cat, label, done, hasLocation)
+                }
+            );
+        }
+    }
+
+    if (cat === 'TIANG') {
+        if (!session.deviceLabel || !session.locationUrl) {
+            return ctx.reply(
+                `🚫 *EVIDENT TIANG BELUM LENGKAP!*\n\n` +
+                `Sesuai SOP, tiang wajib memiliki Label, Foto Evident, dan Share Loc GPS (radius > 30 meter).\n\n` +
+                `👉 *Silakan selesaikan step yang masih kurang!*`
+            );
+        }
+    }
+
+    if (cat === 'MODEM') {
+        if (!session.locationUrl || !session.customerId || !session.modemSn) {
+            return ctx.reply(
+                `🚫 *EVIDENT MODEM BELUM LENGKAP!*\n\n` +
+                `Sesuai SOP, seluruh alur input modem (Share Loc, Label ODP, ID, Nama, SN, Foto Depan, Foto Belakang) wajib diselesaikan secara berurutan.`
+            );
+        }
+    }
 
     clearSession(chatId);
 
     const finishText =
         `🏁 *SELESAI INPUT EVIDENT ${cat} (DONE)*\n\n` +
         `🏷 *Label Perangkat:* \`${label}\`\n` +
-        `📸 *Jenis Foto Terupload:* *${done} / 4*\n\n` +
+        `📸 *Jenis Foto Terupload:* *${done.length} / 4*\n` +
+        `📍 *Titik Lokasi GPS:* ✅ Tersimpan\n\n` +
         `✨ Semua data dan foto sudah tersimpan di Dashboard EvidentVault.\n\n` +
         `Silakan pilih menu untuk input perangkat berikutnya:`;
 
@@ -1981,6 +2176,10 @@ bot.command(['done', 'selesai'], async (ctx) => {
         [
             Markup.button.callback('📦 Input ODC Baru', 'start_odc'),
             Markup.button.callback('🛜 Input ODP Baru', 'start_odp')
+        ],
+        [
+            Markup.button.callback('🪵 Input Tiang Baru', 'start_tiang'),
+            Markup.button.callback('💻 Input Modem Baru', 'start_modem')
         ],
         [
             Markup.button.callback('📊 Cek Status', 'action_open_status'),
@@ -2116,55 +2315,81 @@ bot.action('action_odc_shareloc', async (ctx) => {
 
 // Aksi Pemilihan Jenis Foto Evident (Tampak Luar, Dalam, Redaman, Label)
 bot.action(/action_type:(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
     const type = ctx.match[1];
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
 
     if (!session.deviceLabel) {
+        await ctx.answerCbQuery();
         return ctx.reply("⚠️ Sesi telah berakhir atau label belum dimasukkan. Silakan pilih menu:", buildMainInlineMenu());
     }
 
-    // SOP ODC & ODP: Wajib Share Loc sebelum upload Tampak Luar / Depan
     const isOdpCat = (session.category || '').toUpperCase() === 'ODP' || (session.deviceLabel || '').toUpperCase().startsWith('ODP');
     const isOdcCat = !isOdpCat && ((session.category || '').toUpperCase().startsWith('ODC') || (session.deviceLabel || '').toUpperCase().startsWith('ODC'));
+    const done = Array.isArray(session.completedTypes) ? session.completedTypes : [];
+    const hasLocation = Boolean(session.locationUrl || (session.latitude && session.longitude));
 
-    if (isOdcCat && type === 'TAMPAK LUAR' && !session.locationUrl && !session.latitude) {
-        session.step = 'waiting_location_odc';
+    // VALIDASI URUTAN STEP (ANTI-SKIP): Wajib Berurutan Sesuai SOP
+    if (!hasLocation) {
+        await ctx.answerCbQuery('🚫 Step terkunci! Wajib Share Loc GPS terlebih dahulu.', { show_alert: true });
+        session.step = isOdcCat ? 'waiting_location_odc' : 'waiting_location_odp';
         return ctx.reply(
-            `📍 *SHARE LOC DIBUTUHKAN TERLEBIH DAHULU*\n\n` +
-            `🏷 *Perangkat ODC:* \`${session.deviceLabel}\`\n\n` +
-            `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
-            `Sebelum mengunggah Foto ODC Tampak Depan / Luar, teknisi wajib membagikan titik lokasi GPS ODC di lapangan.\n\n` +
-            `👇 *Silakan tekan tombol di bawah untuk membagikan titik lokasi GPS ODC:*`,
+            `📍 *STEP 1/5: SHARE LOC DIBUTUHKAN TERLEBIH DAHULU!*\n\n` +
+            `🏷 *Perangkat:* \`${session.deviceLabel}\`\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Sebelum mengunggah foto apapun, teknisi **WAJIB** berada di titik fisik perangkat dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+            `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+            `👉 *Tekan tombol lokasi di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
                 ...Markup.keyboard([
-                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                    [Markup.button.locationRequest(isOdcCat ? '📍 Kirim Lokasi GPS ODC Sekarang' : '📍 Kirim Lokasi GPS ODP Sekarang')],
                     ['❌ Batalkan Sesi']
-                ]).resize().oneTime()
+                ]).resize()
             }
         );
     }
 
-    if (isOdpCat && type === 'TAMPAK LUAR' && !session.locationUrl && !session.latitude) {
-        session.step = 'waiting_location_odp';
+    if (type === 'TAMPAK DALAM' && !done.includes('TAMPAK LUAR')) {
+        await ctx.answerCbQuery('🚫 Step terkunci! Harap upload Foto 1 (Tampak Luar) terlebih dahulu.', { show_alert: true });
         return ctx.reply(
-            `📍 *SHARE LOC DIBUTUHKAN TERLEBIH DAHULU*\n\n` +
-            `🏷️ *Perangkat ODP:* \`${session.deviceLabel}\`\n\n` +
-            `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
-            `Sebelum mengunggah Foto ODP Tampak Depan / Luar, teknisi wajib membagikan titik lokasi GPS ODP di lapangan.\n\n` +
-            `👇 *Silakan tekan tombol di bawah untuk membagikan titik lokasi GPS ODP:*`,
+            `🚫 *STEP TERKUNCI: FOTO 1 (TAMPAK LUAR) BELUM DIUNGGAH!*\n\n` +
+            `Sesuai SOP berurutan, Anda **WAJIB** mengunggah Foto 1 (Tampak Luar) terlebih dahulu sebelum dapat mengambil Foto Tampak Dalam.\n\n` +
+            `👉 *Silakan kirimkan Foto Tampak Luar sekarang:*`,
             {
                 parse_mode: 'Markdown',
-                ...Markup.keyboard([
-                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
-                    ['❌ Batalkan Sesi']
-                ]).resize().oneTime()
+                ...buildPhotoTypeMenu(isOdpCat ? 'ODP' : 'ODC', session.deviceLabel, done, hasLocation)
             }
         );
     }
 
+    if (type === 'REDAMAN' && !done.includes('TAMPAK DALAM')) {
+        await ctx.answerCbQuery('🚫 Step terkunci! Harap upload Foto 2 (Tampak Dalam) terlebih dahulu.', { show_alert: true });
+        return ctx.reply(
+            `🚫 *STEP TERKUNCI: FOTO 2 (TAMPAK DALAM) BELUM DIUNGGAH!*\n\n` +
+            `Sesuai SOP berurutan, Anda **WAJIB** mengunggah Foto 2 (Tampak Dalam) terlebih dahulu sebelum dapat mengambil Foto Redaman OPM.\n\n` +
+            `👉 *Silakan kirimkan Foto Tampak Dalam sekarang:*`,
+            {
+                parse_mode: 'Markdown',
+                ...buildPhotoTypeMenu(isOdpCat ? 'ODP' : 'ODC', session.deviceLabel, done, hasLocation)
+            }
+        );
+    }
+
+    if (type === 'LABEL' && !done.includes('REDAMAN')) {
+        await ctx.answerCbQuery('🚫 Step terkunci! Harap upload Foto 3 (Redaman OPM) terlebih dahulu.', { show_alert: true });
+        return ctx.reply(
+            `🚫 *STEP TERKUNCI: FOTO 3 (REDAMAN OPM) BELUM DIUNGGAH!*\n\n` +
+            `Sesuai SOP berurutan, Anda **WAJIB** mengunggah Foto 3 (Redaman OPM) terlebih dahulu sebelum dapat mengambil Foto Label Stiker.\n\n` +
+            `👉 *Silakan kirimkan Foto Redaman sekarang:*`,
+            {
+                parse_mode: 'Markdown',
+                ...buildPhotoTypeMenu(isOdpCat ? 'ODP' : 'ODC', session.deviceLabel, done, hasLocation)
+            }
+        );
+    }
+
+    await ctx.answerCbQuery();
     session.photoType = type;
     session.step = 'waiting_photo';
 
@@ -2194,7 +2419,6 @@ bot.action(/action_type:(.+)/, async (ctx) => {
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-                [Markup.button.callback('🔙 Pilih Jenis Foto Lain', 'action_back_types')],
                 [Markup.button.callback('❌ Batal', 'action_cancel')]
             ])
         }
@@ -2250,6 +2474,19 @@ function handlePhotoTypeCommand(ctx, photoType) {
     const session = getSession(chatId);
 
     if (session.deviceLabel && (session.category === 'ODC' || session.category === 'ODP')) {
+        const done = Array.isArray(session.completedTypes) ? session.completedTypes : [];
+        const hasLocation = Boolean(session.locationUrl || (session.latitude && session.longitude));
+        const next = getOdcOdpNextStep(done, hasLocation);
+
+        if (next.type !== photoType) {
+            return ctx.reply(
+                `🚫 *PERINTAH DITOLAK: HARUS SESUAI URUTAN STEP!*\n\n` +
+                `Sesuai SOP PT Mahawira Nusantara Grup, Anda **WAJIB** menyelesaikan step secara berurutan dan tidak boleh melompati step.\n\n` +
+                `Step yang wajib Anda lakukan saat ini:\n👉 *${next.name}*\n\n` +
+                `Silakan selesaikan step tersebut terlebih dahulu!`
+            );
+        }
+
         session.photoType = photoType;
         session.step = 'waiting_photo';
         return ctx.reply(
@@ -2261,17 +2498,11 @@ function handlePhotoTypeCommand(ctx, photoType) {
     }
 
     return ctx.reply(
-        `📸 *UPLOAD FOTO ${photoType}*\n\n` +
-        `Silakan pilih kategori perangkat untuk foto ${photoType}:`,
+        `📸 *ALUR STEP-BY-STEP BERURUTAN (SOP EVIDENT)*\n\n` +
+        `Untuk mengunggah evident, silakan pilih menu kategori terlebih dahulu. Sistem akan memandu Anda melalui setiap langkah secara berurutan (Label ➔ Share Loc GPS ➔ Foto-Foto):`,
         {
             parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [
-                    Markup.button.callback(`📦 ODC (${photoType})`, `action_cmd_type:ODC:${photoType}`),
-                    Markup.button.callback(`🛜 ODP (${photoType})`, `action_cmd_type:ODP:${photoType}`)
-                ],
-                [Markup.button.callback('❌ Batal', 'action_cancel')]
-            ])
+            ...buildMainInlineMenu()
         }
     );
 }
@@ -2389,7 +2620,7 @@ bot.on('text', async (ctx, next) => {
         session.step = 'waiting_modem_customer_name';
         return ctx.reply(
             `✅ *ID Pelanggan Tersimpan:* \`${session.customerId}\`\n\n` +
-            `👉 *Langkah 3/6: Silakan masukkan NAMA PELANGGAN:*\n` +
+            `👉 *Langkah 4/7: Silakan masukkan NAMA PELANGGAN:*\n` +
             `💡 *Contoh Penulisan:* \`Bpk. Bambang Pamungkas\` atau \`Ibu Siti Aminah\`\n\n` +
             `_(Ketik /batal jika ingin membatalkan)_`,
             {
@@ -2408,7 +2639,7 @@ bot.on('text', async (ctx, next) => {
         session.step = 'waiting_modem_sn';
         return ctx.reply(
             `✅ *Nama Pelanggan Tersimpan:* \`${session.customerName}\`\n\n` +
-            `👉 *Langkah 4/6: Silakan masukkan SERIAL NUMBER (SN) MODEM:*\n` +
+            `👉 *Langkah 5/7: Silakan masukkan SERIAL NUMBER (SN) MODEM:*\n` +
             `💡 *Contoh Penulisan:* \`ZTEGC12345678\` atau \`FHTT1234ABCD\`\n\n` +
             `_(Ketik /batal jika ingin membatalkan)_`,
             {
@@ -2428,12 +2659,13 @@ bot.on('text', async (ctx, next) => {
         session.step = 'waiting_photo';
         return ctx.reply(
             `✅ *DATA PELANGGAN & MODEM LENGKAP:*\n` +
+            `• 📍 *Lokasi GPS:* \`${session.latitude}, ${session.longitude}\`\n` +
             `• 🏷 *Label ODP:* \`${session.odpReference}\`\n` +
             `• 🔗 *Induk ODC:* \`${session.odcReference}\`\n` +
             `• 🆔 *ID Pelanggan:* \`${session.customerId}\`\n` +
             `• 👤 *Nama Pelanggan:* \`${session.customerName}\`\n` +
             `• 📟 *SN Modem:* \`${session.modemSn}\`\n\n` +
-            `📸 *Langkah 5/6: Silakan kirimkan FOTO MODEM TAMPAK DEPAN!*\n` +
+            `📸 *Langkah 6/7: Silakan kirimkan FOTO MODEM TAMPAK DEPAN!*\n` +
             `💡 _Pastikan fisik depan dan lampu indikator modem terlihat jelas._\n` +
             `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.`,
             {
@@ -2444,6 +2676,42 @@ bot.on('text', async (ctx, next) => {
                 ])
             }
         );
+    }
+
+    // PROTEKSI: Jika sedang dalam sesi menunggu FOTO atau LOKASI, tolak teks biasa
+    if (session.category && session.step) {
+        if (session.step === 'waiting_photo') {
+            return ctx.reply(
+                `⚠️ *SISTEM SEDANG MENUNGGU FOTO:*\n\n` +
+                `🏷 *Perangkat:* \`${session.deviceLabel || session.category}\`\n` +
+                `📷 *Foto yang Dibutuhkan:* *${session.photoType || 'Foto Evident'}*\n\n` +
+                `Sesuai SOP berurutan, Anda **WAJIB** mengirimkan foto untuk step ini sebelum dapat lanjut ke step berikutnya.\n` +
+                `📸 *Silakan ambil / kirimkan foto sekarang!*\n\n` +
+                `_(Ketik /batal jika ingin membatalkan sesi)_`,
+                { parse_mode: 'Markdown' }
+            );
+        }
+        if (session.step === 'waiting_location_odc' || session.step === 'waiting_location_odp' || session.step === 'waiting_location' || session.step === 'waiting_modem_location') {
+            let btnText = '📍 Kirim Lokasi GPS Sekarang';
+            if (session.step === 'waiting_location_odc') btnText = '📍 Kirim Lokasi GPS ODC Sekarang';
+            else if (session.step === 'waiting_location_odp') btnText = '📍 Kirim Lokasi GPS ODP Sekarang';
+            else if (session.step === 'waiting_location') btnText = '📍 Kirim Lokasi Tiang Sekarang';
+            else if (session.step === 'waiting_modem_location') btnText = '📍 Kirim Share Loc Modem';
+
+            return ctx.reply(
+                `⚠️ *SISTEM SEDANG MENUNGGU SHARE LOC GPS!*\n\n` +
+                `🏷 *Perangkat:* \`${session.deviceLabel || session.category}\`\n\n` +
+                `Sesuai SOP, Anda **WAJIB** membagikan titik lokasi GPS terlebih dahulu sebelum dapat mengunggah foto atau lanjut ke step berikutnya.\n\n` +
+                `👉 *Silakan tekan tombol di bawah keyboard Anda sekarang:*`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.keyboard([
+                        [Markup.button.locationRequest(btnText)],
+                        ['❌ Batalkan Sesi']
+                    ]).resize()
+                }
+            );
+        }
     }
 
     // KASUS A: Sedang mengedit label via tombol [Edit Label]
@@ -2474,29 +2742,23 @@ bot.on('text', async (ctx, next) => {
             }
 
             session.deviceLabel = check.formatted;
-            if (session.photoType) {
-                session.step = 'waiting_photo';
-                return ctx.reply(
-                    `✅ *Label ODC Terkonfirmasi Benar:* \`${check.formatted}\`\n` +
-                    `📷 *Jenis Foto:* *${session.photoType}*\n\n` +
-                    `📸 *Silakan kirimkan FOTO ${session.photoType} sekarang!*\n` +
-                    `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.`,
-                    { parse_mode: 'Markdown' }
-                );
-            }
+            session.completedTypes = [];
+            session.step = 'waiting_location_odc';
+            session.photoType = null;
 
-            session.step = 'waiting_photo_type';
             return ctx.reply(
                 `✅ *Label ODC Terkonfirmasi Benar:* \`${check.formatted}\`\n\n` +
-                `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-                `1️⃣ 🚪 *Tampak Luar:* Pintu / fisik luar ODC tertutup\n` +
-                `2️⃣ 📦 *Tampak Dalam:* Bagian dalam baki / tray / splitter\n` +
-                `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-                `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODC\n\n` +
-                `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+                `📍 *LANGKAH 2/6: BAGIKAN SHARE LOC GPS ODC*\n\n` +
+                `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+                `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODC dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+                `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+                `👉 *Silakan tekan tombol di bawah keyboard:*`,
                 {
                     parse_mode: 'Markdown',
-                    ...buildPhotoTypeMenu('ODC', check.formatted)
+                    ...Markup.keyboard([
+                        [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                        ['❌ Batalkan Sesi']
+                    ]).resize()
                 }
             );
         }
@@ -2547,31 +2809,23 @@ bot.on('text', async (ctx, next) => {
 
             session.deviceLabel = check.formattedOdp;
             session.odcReference = check.expectedOdc;
+            session.completedTypes = [];
+            session.step = 'waiting_location_odp';
+            session.photoType = null;
 
-            if (session.photoType) {
-                session.step = 'waiting_photo';
-                return ctx.reply(
-                    `✅ *Label ODP Terkonfirmasi Benar:* \`${check.formattedOdp}\` (Induk: \`${check.expectedOdc}\`)\n` +
-                    `📷 *Jenis Foto:* *${session.photoType}*\n\n` +
-                    `📸 *Silakan kirimkan FOTO ${session.photoType} sekarang!*\n` +
-                    `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.`,
-                    { parse_mode: 'Markdown' }
-                );
-            }
-
-            session.step = 'waiting_photo_type';
             return ctx.reply(
-                `✅ *Label ODP Terkonfirmasi Benar:* \`${check.formattedOdp}\`\n` +
-                `🔗 *Induk ODC:* \`${check.expectedOdc}\`\n\n` +
-                `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-                `1️⃣ 🚪 *Tampak Luar:* Box luar ODP tertutup\n` +
-                `2️⃣ 📦 *Tampak Dalam:* Bagian dalam baki / tray / konektor\n` +
-                `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-                `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODP\n\n` +
-                `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+                `✅ *Label ODP Terkonfirmasi Benar:* \`${check.formattedOdp}\` (Induk: \`${check.expectedOdc}\`)\n\n` +
+                `📍 *LANGKAH 2/6: BAGIKAN SHARE LOC GPS ODP*\n\n` +
+                `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+                `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODP dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+                `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+                `👉 *Silakan tekan tombol di bawah keyboard:*`,
                 {
                     parse_mode: 'Markdown',
-                    ...buildPhotoTypeMenu('ODP', check.formattedOdp)
+                    ...Markup.keyboard([
+                        [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
+                        ['❌ Batalkan Sesi']
+                    ]).resize()
                 }
             );
         }
@@ -2607,30 +2861,23 @@ bot.on('text', async (ctx, next) => {
         }
 
         session.deviceLabel = check.formatted;
+        session.completedTypes = [];
+        session.step = 'waiting_location_odc';
+        session.photoType = null;
 
-        if (session.photoType) {
-            session.step = 'waiting_photo';
-            return ctx.reply(
-                `✅ *Label ODC Terkonfirmasi:* \`${check.formatted}\`\n` +
-                `📷 *Jenis Foto:* *${session.photoType}*\n\n` +
-                `📸 *Silakan kirimkan FOTO ${session.photoType} ODC sekarang!*\n` +
-                `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.`,
-                { parse_mode: 'Markdown' }
-            );
-        }
-
-        session.step = 'waiting_photo_type';
         return ctx.reply(
             `✅ *Label ODC Terkonfirmasi:* \`${check.formatted}\`\n\n` +
-            `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-            `1️⃣ 🚪 *Tampak Luar:* Pintu / fisik luar ODC tertutup\n` +
-            `2️⃣ 📦 *Tampak Dalam:* Bagian dalam baki / tray / splitter\n` +
-            `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-            `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODC\n\n` +
-            `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+            `📍 *LANGKAH 2/6: BAGIKAN SHARE LOC GPS ODC*\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODC dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+            `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+            `👉 *Silakan tekan tombol di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
-                ...buildPhotoTypeMenu('ODC', check.formatted)
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
             }
         );
     }
@@ -2687,32 +2934,24 @@ bot.on('text', async (ctx, next) => {
 
         session.deviceLabel = check.formattedOdp;
         session.odcReference = expectedOdc;
+        session.completedTypes = [];
+        session.step = 'waiting_location_odp';
+        session.photoType = null;
 
-        if (session.photoType) {
-            session.step = 'waiting_photo';
-            return ctx.reply(
-                `✅ *ODC Induk Terverifikasi:* \`${expectedOdc}\` (Telah aktif di database)\n` +
-                `🏷 *Label ODP:* \`${check.formattedOdp}\`\n` +
-                `📷 *Jenis Foto:* *${session.photoType}*\n\n` +
-                `📸 *Silakan kirimkan FOTO ${session.photoType} ODP sekarang!*\n` +
-                `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.`,
-                { parse_mode: 'Markdown' }
-            );
-        }
-
-        session.step = 'waiting_photo_type';
         return ctx.reply(
             `✅ *ODC Induk Terverifikasi:* \`${expectedOdc}\` (Telah aktif di database)\n` +
             `🏷 *Label ODP:* \`${check.formattedOdp}\`\n\n` +
-            `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-            `1️⃣ 🚪 *Tampak Luar:* Box luar ODP tertutup\n` +
-            `2️⃣ 📦 *Tampak Dalam:* Bagian dalam baki / tray / konektor\n` +
-            `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-            `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODP\n\n` +
-            `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+            `📍 *LANGKAH 2/6: BAGIKAN SHARE LOC GPS ODP*\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODP dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+            `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+            `👉 *Silakan tekan tombol di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
-                ...buildPhotoTypeMenu('ODP', check.formattedOdp)
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
             }
         );
     }
@@ -2744,20 +2983,23 @@ bot.on('text', async (ctx, next) => {
 
         session.category = 'ODC';
         session.deviceLabel = check.formatted;
+        session.completedTypes = [];
         session.photoType = null;
-        session.step = 'waiting_photo_type';
+        session.step = 'waiting_location_odc';
 
         return ctx.reply(
             `✅ *Label ODC Terkonfirmasi:* \`${check.formatted}\`\n\n` +
-            `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-            `1️⃣ 🚪 *Tampak Luar:* Pintu / fisik luar ODC tertutup\n` +
-            `2️⃣ 📦 *Tampak Dalam:* Bagian dalam baki / tray / splitter\n` +
-            `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-            `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODC\n\n` +
-            `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+            `📍 *LANGKAH 2/6: BAGIKAN SHARE LOC GPS ODC*\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODC dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+            `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+            `👉 *Silakan tekan tombol di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
-                ...buildPhotoTypeMenu('ODC', check.formatted)
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
             }
         );
     }
@@ -2813,21 +3055,24 @@ bot.on('text', async (ctx, next) => {
         session.category = 'ODP';
         session.deviceLabel = check.formattedOdp;
         session.odcReference = expectedOdc;
+        session.completedTypes = [];
         session.photoType = null;
-        session.step = 'waiting_photo_type';
+        session.step = 'waiting_location_odp';
 
         return ctx.reply(
             `✅ *ODC Induk Terverifikasi:* \`${expectedOdc}\` (Telah aktif di database)\n` +
             `🏷 *Label ODP:* \`${check.formattedOdp}\`\n\n` +
-            `📸 *Silakan pilih jenis foto yang ingin Anda upload:*\n` +
-            `1️⃣ 🚪 *Tampak Luar:* Box luar ODP tertutup\n` +
-            `2️⃣ 📦 *Tampak Dalam:* Bagian dalam baki / tray / konektor\n` +
-            `3️⃣ 📟 *Foto Redaman:* Layar ukur OPM (-dBm)\n` +
-            `4️⃣ 🏷 *Foto Label:* Stiker label perangkat ODP\n\n` +
-            `👉 *Klik salah satu tombol jenis foto di bawah:*`,
+            `📍 *LANGKAH 2/6: BAGIKAN SHARE LOC GPS ODP*\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Sebelum mengambil foto apapun, teknisi **WAJIB** berada di lokasi fisik ODP dan membagikan titik lokasi GPS melalui tombol di bawah keyboard.\n` +
+            `⚠️ *Step ini wajib dan tidak dapat dilewati/di-skip.*\n\n` +
+            `👉 *Silakan tekan tombol di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
-                ...buildPhotoTypeMenu('ODP', check.formattedOdp)
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
             }
         );
     }
@@ -3087,21 +3332,19 @@ bot.on('location', async (ctx) => {
             `📍 *Titik Koordinat:* \`${lat}, ${lng}\`\n` +
             `🗺️ *Google Maps:* [Buka Peta Lokasi](${mapsUrl})\n\n` +
             `✨ *Titik lokasi GPS ini telah tersimpan di Web Dashboard!*\n\n` +
-            `🚪 *SEKARANG, SILAKAN AMBIL / KIRIMKAN FOTO ODP TAMPAK LUAR (DEPAN):*\n` +
-            `💡 *Tips:* Pastikan pintu ODP tertutup rapi dan fisik box ODP terlihat jelas dan utuh.`,
+            `🚪 *LANGKAH 3/6: SEKARANG AMBIL / KIRIMKAN FOTO 1 - TAMPAK LUAR (DEPAN):*\n` +
+            `💡 *SOP:* Pastikan pintu ODP tertutup rapi dan fisik box ODP terlihat jelas, utuh, dan tegak.\n` +
+            `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.\n\n` +
+            `📸 *Silakan ambil / kirimkan foto Tampak Luar sekarang:*`,
             {
                 parse_mode: 'Markdown',
-                ...Markup.removeKeyboard()
+                ...Markup.removeKeyboard(),
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Batal', 'action_cancel')]
+                ])
             }
         );
-
-        return ctx.reply(
-            `📸 *Silakan ambil / kirimkan foto ${session.deviceLabel} Tampak Luar (Depan) sekarang:*`,
-            Markup.inlineKeyboard([
-                [Markup.button.callback('🔙 Pilih Jenis Foto Lain', 'action_back_types')],
-                [Markup.button.callback('❌ Batal', 'action_cancel')]
-            ])
-        );
+        return;
     }
 
     // 2. Tangani Lokasi GPS untuk ODC (Share Loc sebelum Foto Tampak Luar/Depan)
@@ -3142,21 +3385,19 @@ bot.on('location', async (ctx) => {
             `📍 *Titik Koordinat:* \`${lat}, ${lng}\`\n` +
             `🗺 *Google Maps:* [Buka Peta Lokasi](${mapsUrl})\n\n` +
             `✨ *Titik lokasi GPS ini telah tersimpan di Web Dashboard!*\n\n` +
-            `🚪 *SEKARANG, SILAKAN AMBIL / KIRIMKAN FOTO ODC TAMPAK LUAR (DEPAN):*\n` +
-            `💡 *Tips:* Pastikan pintu ODC tertutup rapi dan fisik box ODC terlihat jelas dan utuh.`,
+            `🚪 *LANGKAH 3/6: SEKARANG AMBIL / KIRIMKAN FOTO 1 - TAMPAK LUAR (DEPAN):*\n` +
+            `💡 *SOP:* Pastikan pintu ODC tertutup rapi dan fisik box ODC terlihat jelas, utuh, dan tegak.\n` +
+            `⚡ Script otomatis memeriksa ketajaman dan anti-duplikat.\n\n` +
+            `📸 *Silakan ambil / kirimkan foto Tampak Luar sekarang:*`,
             {
                 parse_mode: 'Markdown',
-                ...Markup.removeKeyboard()
+                ...Markup.removeKeyboard(),
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Batal', 'action_cancel')]
+                ])
             }
         );
-
-        return ctx.reply(
-            `📸 *Silakan ambil / kirimkan foto ${session.deviceLabel} Tampak Luar (Depan) sekarang:*`,
-            Markup.inlineKeyboard([
-                [Markup.button.callback('🔙 Pilih Jenis Foto Lain', 'action_back_types')],
-                [Markup.button.callback('❌ Batal', 'action_cancel')]
-            ])
-        );
+        return;
     }
 
     if (session.category !== 'TIANG' || session.step !== 'waiting_location' || !session.pendingPhoto) {
@@ -3271,14 +3512,60 @@ bot.on(['photo', 'document'], async (ctx) => {
 
     const session = getSession(chatId);
 
-    // KASUS TIANG: Cegah upload foto apapun jika belum input label tiang
-    if (session.category === 'TIANG' && (session.step === 'waiting_label_tiang' || !session.deviceLabel)) {
+    // VALIDASI URUTAN STEP 1: Wajib Memilih Menu / Kategori Terlebih Dahulu (Anti-Bypass)
+    if (!session.category) {
         return ctx.reply(
-            `⚠️ *AKSI DITAHAN: LABEL TIANG BELUM DIINPUT!*\n\n` +
-            `Sesuai SOP, sebelum mengunggah foto evident, Anda **WAJIB mengetikkan Label / Nomor Tiang terlebih dahulu**.\n\n` +
-            `👉 *Silakan ketikkan Label Tiang Anda sekarang:*\n` +
-            `📌 *Contoh:* \`TIANG-01\`, \`TIANG-SKD 01\`, atau \`T.01\`\n\n` +
-            `_(Ketik /batal jika ingin membatalkan)_`,
+            `🚫 *PENGIRIMAN FOTO DITOLAK!*\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Seluruh penginputan evident **WAJIB dimulai melalui alur resmi bot secara berurutan** (dilarang mengirim foto langsung tanpa memilih menu).\n\n` +
+            `👇 *Silakan pilih menu kategori di bawah untuk memulai alur yang benar:*`,
+            {
+                parse_mode: 'Markdown',
+                ...buildMainInlineMenu()
+            }
+        );
+    }
+
+    // VALIDASI URUTAN STEP 2: Tolak Jika Sedang Menunggu Share Loc GPS (Anti-Skip Share Loc)
+    if (session.step === 'waiting_location_odc' || session.step === 'waiting_location_odp' || session.step === 'waiting_modem_location' || (session.category === 'TIANG' && session.step === 'waiting_location')) {
+        let btnText = '📍 Kirim Lokasi GPS Sekarang';
+        if (session.step === 'waiting_location_odc') btnText = '📍 Kirim Lokasi GPS ODC Sekarang';
+        else if (session.step === 'waiting_location_odp') btnText = '📍 Kirim Lokasi GPS ODP Sekarang';
+        else if (session.step === 'waiting_modem_location') btnText = '📍 Kirim Share Loc Modem';
+        else if (session.category === 'TIANG') btnText = '📍 Kirim Lokasi Tiang Sekarang';
+
+        return ctx.reply(
+            `🚫 *PENGIRIMAN FOTO DITOLAK: ANDA WAJIB SHARE LOC TERLEBIH DAHULU!*\n\n` +
+            `🏷 *Perangkat:* \`${session.deviceLabel || session.category}\`\n\n` +
+            `Sesuai SOP berurutan, Anda **WAJIB membagikan titik lokasi GPS fisik di lapangan terlebih dahulu** sebelum mengambil foto.\n` +
+            `⚠️ *Step ini wajib dan tidak boleh di-skip.*\n\n` +
+            `👉 *Silakan tekan tombol di bawah keyboard Anda sekarang:*`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest(btnText)],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
+            }
+        );
+    }
+
+    // VALIDASI URUTAN STEP 3: Tolak Jika Sedang Menunggu Input Label Perangkat
+    if (session.step === 'waiting_label' || session.step === 'waiting_label_tiang' || session.step === 'waiting_edit_label') {
+        return ctx.reply(
+            `🚫 *PENGIRIMAN FOTO DITOLAK: LABEL BELUM DIINPUT!*\n\n` +
+            `Sesuai SOP berurutan, Anda **WAJIB mengetikkan Nama / Label perangkat terlebih dahulu** sebelum mengirim foto.\n\n` +
+            `_(Ketik label sekarang atau ketik /batal jika ingin membatalkan)_`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+
+    // VALIDASI URUTAN STEP 4: Tolak Jika Kategori MODEM dan Data Pelanggan Belum Lengkap
+    if (session.category === 'MODEM' && (session.step === 'waiting_modem_odp' || session.step === 'waiting_modem_customer_id' || session.step === 'waiting_modem_customer_name' || session.step === 'waiting_modem_sn')) {
+        return ctx.reply(
+            `🚫 *PENGIRIMAN FOTO DITOLAK: DATA PELANGGAN BELUM LENGKAP!*\n\n` +
+            `Sesuai alur berurutan Modem, Anda **WAJIB menyelesaikan pengisian data teks (Label ODP, ID, Nama, SN Modem)** sebelum mengunggah foto.\n\n` +
+            `_(Silakan masukkan data yang sedang diminta atau ketik /batal)_`,
             { parse_mode: 'Markdown' }
         );
     }
@@ -3387,174 +3674,6 @@ bot.on(['photo', 'document'], async (ctx) => {
     }
 
     // ==========================================================
-    // FAST TRACK JIKA TEKNISI MENGISI CAPTION PADA FOTO
-    // ==========================================================
-    if (!session.category && caption) {
-        const detectedType = detectPhotoType(caption);
-        const cleanedCaption = cleanCaptionForLabel(caption);
-        const targetCaption = cleanedCaption || caption;
-
-        // Cek caption MODEM
-        if (targetCaption.toUpperCase().includes('MODEM')) {
-            return ctx.reply(
-                `💻 *ALUR INPUT EVIDENT MODEM PELANGGAN*\n\n` +
-                `Sesuai SOP, evident Modem membutuhkan penginputan data lengkap secara terpisah:\n` +
-                `1️⃣ Label ODP tempat tersambung (lurus ke ODC)\n` +
-                `2️⃣ ID Pelanggan\n` +
-                `3️⃣ Nama Pelanggan\n` +
-                `4️⃣ Serial Number (SN) Modem\n` +
-                `5️⃣ Foto Modem Tampak Depan\n` +
-                `6️⃣ Foto Modem Tampak Belakang (SN Jelas & Terbaca)\n\n` +
-                `👉 *Silakan klik tombol di bawah untuk memulai alur Modem:*`,
-                {
-                    parse_mode: 'Markdown',
-                    ...Markup.inlineKeyboard([
-                        [Markup.button.callback('💻 Mulai Input Modem', 'start_modem')],
-                        [Markup.button.callback('❌ Batal', 'action_cancel')]
-                    ])
-                }
-            );
-        }
-
-        // Cek caption ODC (bisa diawali ODC atau kata ODC di dalamnya)
-        if (targetCaption.toUpperCase().includes('ODC')) {
-            const odcCheck = analyzeOdcLabel(targetCaption);
-            if (odcCheck.valid) {
-                const photoType = detectedType || 'TAMPAK LUAR';
-                const baseLabel = odcCheck.formatted;
-                const fullDeviceLabel = `${baseLabel} [${photoType}]`;
-
-                await ctx.reply(`✅ *Script: Foto jelas & Label ODC terverifikasi:* \`${baseLabel}\` (${photoType})`, { parse_mode: 'Markdown' });
-                if (!session.completedTypes) session.completedTypes = [];
-                if (!session.completedTypes.includes(photoType)) session.completedTypes.push(photoType);
-
-                await saveEvidentToDatabase(ctx, {
-                    name: `evident_${baseLabel.replace(/\s+/g, '_')}_[${photoType.replace(/\s+/g, '_')}]_[H:${sha256Hash.substring(0, 16)}][DH:${dHash || 'none'}]_${Date.now()}.jpg`,
-                    size: fileSize,
-                    category: 'ODC',
-                    deviceLabel: fullDeviceLabel,
-                    baseLabel: baseLabel,
-                    photoType: photoType,
-                    odcReference: baseLabel,
-                    latitude: session.latitude || null,
-                    longitude: session.longitude || null,
-                    locationUrl: session.locationUrl || null,
-                    uploader: uploaderTag,
-                    fileUrl: fileUrl,
-                    fileBuffer: fileBuffer,
-                    mimeType: mimeType,
-                    sha256: sha256Hash,
-                    dhash: dHash,
-                    completedTypes: session.completedTypes
-                });
-
-                // Tetap simpan deviceLabel agar teknisi bisa langsung memilih jenis foto berikutnya
-                session.category = 'ODC';
-                session.deviceLabel = baseLabel;
-                session.odcReference = baseLabel;
-                session.photoType = null;
-                session.step = 'waiting_photo_type';
-                return;
-            } else if (odcCheck.needsEdit) {
-                return ctx.reply(
-                    `❌ *FORMAT PENAMAAN PADA CAPTION SALAH!*\n\n` +
-                    `Input Caption: \`${caption}\`\n` +
-                    `Format yang Benar: \`${odcCheck.suggestion}\`\n\n` +
-                    `📌 *Alasan Script:* ${odcCheck.reason}\n\n` +
-                    `👉 *Silakan klik tombol Edit Label di bawah untuk memperbaiki:*`,
-                    {
-                        parse_mode: 'Markdown',
-                        ...Markup.inlineKeyboard([
-                            [Markup.button.callback('✏️ Edit Label', 'action_edit_label')],
-                            [Markup.button.callback('❌ Batal', 'action_cancel')]
-                        ])
-                    }
-                );
-            }
-        }
-
-        // Cek caption ODP (bisa diawali ODP atau ada kata ODP di dalamnya, e.g. SKD ODP GRB 01/08)
-        if (targetCaption.toUpperCase().includes('ODP')) {
-            const odpCheck = analyzeOdpLabel(targetCaption);
-            if (odpCheck.valid) {
-                // Cek kelurusan wilayah ke ODC Induk
-                const odcExists = await checkOdcExists(odpCheck.expectedOdc, odpCheck.expectedOdcAlt);
-                if (!odcExists) {
-                    return ctx.reply(
-                        `🚫 *INPUT DITOLAK SCRIPT: ODC INDUK BELUM TERDAFTAR!*\n\n` +
-                        `🏷 *Label ODP:* \`${odpCheck.formattedOdp}\`\n` +
-                        `🔍 *Acuan ODC Induk:* \`${odpCheck.expectedOdc}\`\n\n` +
-                        `❌ Perangkat ODC \`${odpCheck.expectedOdc}\` belum terdaftar di database!\n` +
-                        `Wilayah ODP wajib lurus dengan ODC induk yang sudah terdaftar. Anda harus menginput ODC tersebut terlebih dahulu sebelum menginput ODP ini.`,
-                        {
-                            parse_mode: 'Markdown',
-                            ...Markup.inlineKeyboard([
-                                [Markup.button.callback(`📦 Input ODC: ${odpCheck.expectedOdc} Dulu`, `action_direct_odc:${encodeURIComponent(odpCheck.expectedOdc)}`)],
-                                [Markup.button.callback('✏️ Edit Label ODP', 'action_edit_label')],
-                                [Markup.button.callback('❌ Batal', 'action_cancel')]
-                            ])
-                        }
-                    );
-                }
-
-                const photoType = detectedType || 'TAMPAK LUAR';
-                const baseLabel = odpCheck.formattedOdp;
-                const fullDeviceLabel = `${baseLabel} [${photoType}]`;
-                const parentOdc = odpCheck.expectedOdc;
-
-                await ctx.reply(`✅ *Script: Foto jelas & ODP lurus dengan ODC:* \`${baseLabel}\` (${photoType})`, { parse_mode: 'Markdown' });
-                if (!session.completedTypes) session.completedTypes = [];
-                if (!session.completedTypes.includes(photoType)) session.completedTypes.push(photoType);
-
-                await saveEvidentToDatabase(ctx, {
-                    name: `evident_${baseLabel.replace(/[\s\/]+/g, '_')}_[${photoType.replace(/\s+/g, '_')}]_[H:${sha256Hash.substring(0, 16)}][DH:${dHash || 'none'}]_${Date.now()}.jpg`,
-                    size: fileSize,
-                    category: parentOdc,
-                    deviceLabel: fullDeviceLabel,
-                    baseLabel: baseLabel,
-                    photoType: photoType,
-                    odcReference: parentOdc,
-                    odpName: baseLabel,
-                    odpReference: baseLabel,
-                    latitude: session.latitude || null,
-                    longitude: session.longitude || null,
-                    locationUrl: session.locationUrl || null,
-                    uploader: uploaderTag,
-                    fileUrl: fileUrl,
-                    fileBuffer: fileBuffer,
-                    mimeType: mimeType,
-                    sha256: sha256Hash,
-                    dhash: dHash,
-                    completedTypes: session.completedTypes
-                });
-
-                // Siapkan sesi untuk upload jenis foto ODP berikutnya
-                session.category = 'ODP';
-                session.deviceLabel = baseLabel;
-                session.odcReference = parentOdc;
-                session.photoType = null;
-                session.step = 'waiting_photo_type';
-                return;
-            } else if (odpCheck.needsEdit) {
-                return ctx.reply(
-                    `❌ *FORMAT PENAMAAN PADA CAPTION SALAH!*\n\n` +
-                    `Input Caption: \`${caption}\`\n` +
-                    `Format yang Benar: \`${odpCheck.suggestion}\`\n\n` +
-                    `📌 *Alasan Script:* ${odpCheck.reason}\n\n` +
-                    `👉 *Silakan klik tombol Edit Label di bawah untuk memperbaiki:*`,
-                    {
-                        parse_mode: 'Markdown',
-                        ...Markup.inlineKeyboard([
-                            [Markup.button.callback('✏️ Edit Label', 'action_edit_label')],
-                            [Markup.button.callback('❌ Batal', 'action_cancel')]
-                        ])
-                    }
-                );
-            }
-        }
-    }
-
-    // ==========================================================
     // ALUR STEP-BY-STEP (FOTO LOLOS KUALITAS & ANTI-DUPLIKAT -> LANGSUNG SIMPAN OTOMATIS)
     // ==========================================================
 
@@ -3563,9 +3682,23 @@ bot.on(['photo', 'document'], async (ctx) => {
         if (!session.deviceLabel) {
             return ctx.reply("⚠️ Harap masukkan label ODC terlebih dahulu. Format: `ODC-(WILAYAH) (NOMOR)`", { parse_mode: 'Markdown' });
         }
+        if (!session.locationUrl && !session.latitude) {
+            session.step = 'waiting_location_odc';
+            return ctx.reply(
+                `📍 *LOKASI GPS BELUM DITERIMA!*\n\n` +
+                `Sesuai SOP berurutan, Anda **WAJIB** mengirimkan share loc GPS terlebih dahulu melalui tombol di bawah keyboard:`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.keyboard([
+                        [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODC Sekarang')],
+                        ['❌ Batalkan Sesi']
+                    ]).resize()
+                }
+            );
+        }
 
         const baseLabel = session.deviceLabel;
-        const photoType = session.photoType || detectPhotoType(caption) || 'TAMPAK LUAR';
+        const photoType = session.photoType || 'TAMPAK LUAR';
         const fullDeviceLabel = `${baseLabel} [${photoType}]`;
 
         if (!session.completedTypes) session.completedTypes = [];
@@ -3590,11 +3723,6 @@ bot.on(['photo', 'document'], async (ctx) => {
             dhash: dHash,
             completedTypes: session.completedTypes
         });
-
-        // Tetap simpan deviceLabel agar teknisi bisa langsung memilih jenis foto berikutnya
-        session.deviceLabel = baseLabel;
-        session.photoType = null;
-        session.step = 'waiting_photo_type';
         return;
     }
 
@@ -3603,9 +3731,23 @@ bot.on(['photo', 'document'], async (ctx) => {
         if (!session.deviceLabel) {
             return ctx.reply("⚠️ Harap masukkan label ODP terlebih dahulu. Format: `ODP-(WILAYAH) (NO_ODC)/(NO_ODP)`", { parse_mode: 'Markdown' });
         }
+        if (!session.locationUrl && !session.latitude) {
+            session.step = 'waiting_location_odp';
+            return ctx.reply(
+                `📍 *LOKASI GPS BELUM DITERIMA!*\n\n` +
+                `Sesuai SOP berurutan, Anda **WAJIB** mengirimkan share loc GPS terlebih dahulu melalui tombol di bawah keyboard:`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.keyboard([
+                        [Markup.button.locationRequest('📍 Kirim Lokasi GPS ODP Sekarang')],
+                        ['❌ Batalkan Sesi']
+                    ]).resize()
+                }
+            );
+        }
 
         const baseLabel = session.deviceLabel;
-        const photoType = session.photoType || detectPhotoType(caption) || 'TAMPAK LUAR';
+        const photoType = session.photoType || 'TAMPAK LUAR';
         const fullDeviceLabel = `${baseLabel} [${photoType}]`;
         const parentOdc = session.odcReference || 'ODP';
 
@@ -3632,11 +3774,6 @@ bot.on(['photo', 'document'], async (ctx) => {
             dhash: dHash,
             completedTypes: session.completedTypes
         });
-
-        // Tetap simpan deviceLabel agar teknisi bisa langsung memilih jenis foto berikutnya
-        session.deviceLabel = baseLabel;
-        session.photoType = null;
-        session.step = 'waiting_photo_type';
         return;
     }
 
@@ -3688,15 +3825,14 @@ bot.on(['photo', 'document'], async (ctx) => {
         session.step = 'waiting_location';
 
         return ctx.reply(
-            `📍 *LANGKAH 3: WAJIB TAGGING LOKASI TIANG (GPS)*\n\n` +
+            `📍 *LANGKAH 3/3: WAJIB TAGGING LOKASI TIANG (GPS)*\n\n` +
             `🏷 *Label Tiang:* \`${session.deviceLabel}\`\n` +
             `✅ Foto tiang lolos pemeriksaan script (Jelas & Asli/Bukan Duplikat)!\n\n` +
             `⚠️ *Aturan SOP Tagging GPS Tiang:*\n` +
             `• Koordinat tiang wajib berjarak **LEBIH DARI 30 METER** dari tiang yang sudah terdaftar.\n` +
             `• Jika titik koordinat berada di dalam radius ≤ 30 meter dari tiang lain, sistem akan otomatis menolak.\n\n` +
             `👉 *Sekarang silakan kirimkan Lokasi GPS Tiang:*\n` +
-            `Tekan tombol **📍 Kirim Lokasi Tiang Sekarang** di papan bawah layar Anda.\n` +
-            `_(Atau tekan klip 📎 -> pilih Location / Lokasi -> Kirim Lokasi Saat Ini)_`,
+            `Tekan tombol **📍 Kirim Lokasi Tiang Sekarang** di papan bawah layar Anda:`,
             {
                 parse_mode: 'Markdown',
                 ...Markup.keyboard([
@@ -3732,7 +3868,7 @@ bot.on(['photo', 'document'], async (ctx) => {
             session.step = 'waiting_modem_customer_id';
             return ctx.reply(
                 `⚠️ *INPUT MODEM MEMBUTUHKAN ID PELANGGAN!*\n\n` +
-                `👉 *Langkah 2/6: Silakan masukkan ID PELANGGAN:*\n` +
+                `👉 *Langkah 3/7: Silakan masukkan ID PELANGGAN:*\n` +
                 `💡 *Contoh Penulisan:* \`ID-100293\` atau \`1029384\`\n\n` +
                 `_(Ketik ID Pelanggan sekarang)_`,
                 {
@@ -3749,7 +3885,7 @@ bot.on(['photo', 'document'], async (ctx) => {
             session.step = 'waiting_modem_customer_name';
             return ctx.reply(
                 `⚠️ *INPUT MODEM MEMBUTUHKAN NAMA PELANGGAN!*\n\n` +
-                `👉 *Langkah 3/6: Silakan masukkan NAMA PELANGGAN:*\n` +
+                `👉 *Langkah 4/7: Silakan masukkan NAMA PELANGGAN:*\n` +
                 `💡 *Contoh Penulisan:* \`Bpk. Bambang Pamungkas\` atau \`Ibu Siti Aminah\`\n\n` +
                 `_(Ketik Nama Pelanggan sekarang)_`,
                 {
@@ -3766,7 +3902,7 @@ bot.on(['photo', 'document'], async (ctx) => {
             session.step = 'waiting_modem_sn';
             return ctx.reply(
                 `⚠️ *INPUT MODEM MEMBUTUHKAN SERIAL NUMBER (SN) MODEM!*\n\n` +
-                `👉 *Langkah 4/6: Silakan masukkan SERIAL NUMBER (SN) MODEM:*\n` +
+                `👉 *Langkah 5/7: Silakan masukkan SERIAL NUMBER (SN) MODEM:*\n` +
                 `💡 *Contoh Penulisan:* \`ZTEGC12345678\` atau \`FHTT1234ABCD\`\n\n` +
                 `_(Ketik SN Modem sekarang)_`,
                 {
@@ -3819,7 +3955,7 @@ bot.on(['photo', 'document'], async (ctx) => {
 
             return ctx.reply(
                 `✅ *FOTO 1/2 (TAMPAK DEPAN) BERHASIL TERSIMPAN!*\n\n` +
-                `📸 *Langkah 6/6: SEKARANG KIRIMKAN FOTO MODEM TAMPAK BELAKANG:*\n\n` +
+                `📸 *Langkah 7/7: SEKARANG KIRIMKAN FOTO MODEM TAMPAK BELAKANG:*\n\n` +
                 `⚠️ *PERHATIAN PENTING (SOP):*\n` +
                 `• Arahkan kamera ke **stiker bagian belakang modem**.\n` +
                 `• **PASTIKAN TULISAN SERIAL NUMBER (SN: \`${sn}\`) TERLIHAT SANGAT JELAS DAN TERBACA!**\n` +
@@ -3861,60 +3997,32 @@ bot.on(['photo', 'document'], async (ctx) => {
                 dhash: dHash
             });
 
-            // Jika lokasi GPS SUDAH ADA (karena sudah dikirim di langkah awal)
-            if (session.locationUrl) {
-                await ctx.reply(
-                    `🎉 *UPLOAD EVIDENT MODEM SELESAI (LENGKAP DENGAN SHARE LOC GPS)!*\n\n` +
-                    `📋 *Rincian Lengkap Evident Pelanggan:*\n` +
-                    `• 🏷 *Label ODP:* \`${odpRef}\`\n` +
-                    `• 🔗 *Induk ODC:* \`${odcCat}\`\n` +
-                    `• 🆔 *ID Pelanggan:* \`${cId}\`\n` +
-                    `• 👤 *Nama Pelanggan:* \`${cName}\`\n` +
-                    `• 📟 *SN Modem:* \`${sn}\`\n` +
-                    `• 📍 *Koordinat GPS:* \`${session.latitude}, ${session.longitude}\`\n` +
-                    `• 🗺 *Google Maps:* [Buka Peta Lokasi](${session.locationUrl})\n` +
-                    `• 📷 *Foto 1:* Tampak Depan (Tersimpan)\n` +
-                    `• 📷 *Foto 2:* Tampak Belakang & SN Jelas (Tersimpan)\n\n` +
-                    `📂 *Seluruh data evident modem dan titik GPS telah tersimpan di Web Dashboard.*\n\n` +
-                    `👇 *Pilih menu berikutnya:*`,
-                    {
-                        parse_mode: 'Markdown',
-                        ...Markup.removeKeyboard(),
-                        ...Markup.inlineKeyboard([
-                            [Markup.button.callback('💻 Input Modem Lain', 'start_modem')],
-                            [Markup.button.callback('📤 Upload Kategori Lain', 'action_open_upload')],
-                            [Markup.button.callback('📊 Cek Status', 'action_open_status')]
-                        ])
-                    }
-                );
-                clearSession(chatId);
-                return;
-            }
-
-            // Jika lokasi GPS belum ada (misal dilewati di langkah awal)
+            // Selesai seluruh alur modem
             await ctx.reply(
-                `🎉 *UPLOAD EVIDENT MODEM SELESAI (2/2 FOTO LENGKAP)!*\n\n` +
-                `📋 *Rincian Evident Pelanggan:*\n` +
+                `🎉 *UPLOAD EVIDENT MODEM SELESAI 100% LENGKAP!*\n\n` +
+                `📋 *Rincian Lengkap Evident Pelanggan:*\n` +
                 `• 🏷 *Label ODP:* \`${odpRef}\`\n` +
                 `• 🔗 *Induk ODC:* \`${odcCat}\`\n` +
                 `• 🆔 *ID Pelanggan:* \`${cId}\`\n` +
                 `• 👤 *Nama Pelanggan:* \`${cName}\`\n` +
                 `• 📟 *SN Modem:* \`${sn}\`\n` +
+                `• 📍 *Koordinat GPS:* \`${session.latitude}, ${session.longitude}\`\n` +
+                `• 🗺 *Google Maps:* [Buka Peta Lokasi](${session.locationUrl})\n` +
                 `• 📷 *Foto 1:* Tampak Depan (Tersimpan)\n` +
                 `• 📷 *Foto 2:* Tampak Belakang & SN Jelas (Tersimpan)\n\n` +
-                `📂 *Kedua evident foto modem otomatis masuk ke folder \`${odcCat}\` di Web Dashboard.*\n\n` +
-                `📍 *MOHON BAGIKAN SHARE LOC GPS MODEM PELANGGAN:*\n` +
-                `SOP: Share loc wajib dikirim melalui tombol di bawah agar titik rumah pelanggan terpetakan di Dashboard GIS.\n\n` +
-                `👇 Tekan tombol **📍 Kirim Share Loc Modem** di bawah keyboard sekarang:`,
+                `📂 *Seluruh data evident modem dan titik GPS telah tersimpan di Web Dashboard.*\n\n` +
+                `👇 *Pilih menu berikutnya:*`,
                 {
                     parse_mode: 'Markdown',
-                    ...Markup.keyboard([
-                        [Markup.button.locationRequest('📍 Kirim Share Loc Modem')],
-                        ['❌ Batalkan Sesi']
-                    ]).resize()
+                    ...Markup.removeKeyboard(),
+                    ...Markup.inlineKeyboard([
+                        [Markup.button.callback('💻 Input Modem Lain', 'start_modem')],
+                        [Markup.button.callback('📤 Upload Kategori Lain', 'action_open_upload')],
+                        [Markup.button.callback('📊 Cek Status', 'action_open_status')]
+                    ])
                 }
             );
-            session.step = 'waiting_modem_shareloc';
+            clearSession(chatId);
             return;
         }
     }

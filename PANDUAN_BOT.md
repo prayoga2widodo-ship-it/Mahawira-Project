@@ -4,71 +4,56 @@ Bot Telegram ini digunakan oleh teknisi lapangan untuk mengunggah berkas evident
 
 ---
 
-## 📌 Aturan & SOP Input Evident (PENTING)
+## 📌 Aturan & SOP Input Evident (PENTING - WAJIB BERURUTAN & ANTI-SKIP)
 
-1. **Wajib Input ODC Terlebih Dahulu (Induk Jaringan)**
-   * Format penamaan: `odc-(wilayah)-(no odc)`
-   * Contoh: `odc-skd-001` atau `odc-skd-01`
-   * Wajib melampirkan foto fisik perangkat ODC.
-   * Data ODC ini akan menjadi acuan induk bagi perangkat ODP di bawahnya.
+Semua proses penginputan data perangkat di bot sekarang menerapkan **SISTEM WAJIB BERURUTAN (STRICT SEQUENTIAL / ANTI-SKIP)**. Teknisi **TIDAK BISA** melompati step, memintas melalui caption foto, atau menekan tombol `/done` sebelum seluruh tahapan terpenuhi 100%.
 
-2. **Input ODP Wajib Menyantumkan & Sesuai dengan Label ODC**
-   * Format penamaan: `ODP-(WILAYAH) (NO_ODC)/(NO_ODP)`
-   * Contoh Benar: `ODP-SKD 01/01`, `ODP-SKD 01/08`, `ODP-WNJ 01/01`
-   * **Aturan Fisik Lapangan vs Sistem:**
-     * Jika stiker/cat fisik di lapangan tertulis `SKD ODP GRB 01/08`, `SKD ODP 01/08`, atau `ODP/SKD 01/08`, bot akan **otomatis mendeteksi urutan non-standar tersebut dan menolak** dengan memberikan tombol inline `[✏️ Edit Label]` serta saran penulisan yang benar: `ODP-SKD 01/08`.
-     * Teknisi wajib menggunakan format baku `ODP-SKD 01/08` agar sistem database dan dashboard terhubung secara presisi.
-   * Bot akan otomatis memeriksa acuan ODC induk (misal: `ODC-SKD 01`).
-   * **VALIDASI KETAT:** Jika ODC induk belum terdaftar di database, maka **ODP TIDAK BISA DIINPUT**. Bot akan menolak dan meminta teknisi untuk menginput ODC tersebut terlebih dahulu!
-   * Wajib melampirkan foto fisik perangkat ODP.
+---
 
-3. **4 Jenis Foto Evident Wajib (ODC & ODP) + Tombol SELESAI / DONE**
-   Setiap unit ODC dan ODP memiliki alur upload bertahap untuk 4 jenis foto:
-   * 🚪 **1. Foto Tampak Luar:** Foto fisik perangkat tertutup dari luar.
-   * 📦 **2. Foto Tampak Dalam:** Foto baki/tray splitter, perkabelan, dan konektor serat optik.
-   * 📟 **3. Foto Redaman:** Foto layar Optical Power Meter (OPM) yang menunjukkan angka loss/redaman (-dBm).
-   * 🏷 **4. Foto Label:** Foto close-up stiker/plang penamaan perangkat agar terbaca tajam dan jelas.
-   * 🏁 **Menu SELESAI / DONE:** Setelah mengunggah foto, bot menyediakan tombol **`[🏁 SELESAI / DONE]`** atau perintah `/done` / `/selesai` untuk menutup sesi unit perangkat tersebut secara resmi dan merangkum rekap foto yang telah terunggah.
+### 📦 Alur Wajib 6 Step ODC:
+1. **Step 1 - Label ODC:** Kirim label sesuai format baku `odc-skd-01`.
+2. **Step 2 - Share Loc GPS ODC:** Wajib kirim lokasi via tombol keyboard `[📍 Kirim Lokasi GPS ODC Sekarang]`. *(Foto dan tombol menu terkunci sampai GPS diterima).*
+3. **Step 3 - Foto Tampak Luar:** Kirim foto fisik luar ODC tertutup.
+4. **Step 4 - Foto Tampak Dalam:** Kirim foto baki tray/splitter/kabel dalam ODC.
+5. **Step 5 - Foto Redaman:** Kirim foto layar ukur OPM (-dBm).
+6. **Step 6 - Foto Label:** Kirim foto stiker plang label ODC terbaca jelas. *(Setelah foto ke-4 diunggah, sesi otomatis 100% SELESAI).*
 
-4. **Pengelompokan Otomatis File ke Kategori/Folder Penamaan ODC di Dashboard Web**
-   * Semua evident ODC (misal `ODC-SKD 01`) dan seluruh ODP anaknya (misal `ODP-SKD 01/01`, `ODP-SKD 01/08`) secara otomatis masuk ke dalam kategori/folder bernama **`ODC-SKD 01`**.
-   * Di Web Dashboard, tersedia navigasi folder bergaya Google Drive. Mengklik folder `ODC-SKD 01` akan langsung menampilkan seluruh berkas ODC dan ODP yang bersangkutan.
+---
 
-5. **Sistem Sesi Login Dashboard (Bebas Login Ulang saat Refresh)**
-   * Sesi login dashboard disimpan aman di `sessionStorage`.
-   * **Saat halaman di-refresh**, dashboard **TIDAK AKAN meminta login ulang** dan langsung terbuka tanpa jeda.
-   * Permintaan login ulang hanya terjadi apabila tab atau jendela browser dashboard telah ditutup.
+### 🛜 Alur Wajib 6 Step ODP:
+1. **Step 1 - Label ODP:** Kirim label sesuai format baku `ODP-SKD 01/01`. Bot otomatis memvalidasi ODC induk (`ODC-SKD 01`). Jika ODC belum terdaftar, bot menolak!
+2. **Step 2 - Share Loc GPS ODP:** Wajib kirim lokasi via tombol keyboard `[📍 Kirim Lokasi GPS ODP Sekarang]`.
+3. **Step 3 - Foto Tampak Luar:** Kirim foto fisik luar ODP tertutup.
+4. **Step 4 - Foto Tampak Dalam:** Kirim foto baki tray/splitter/konektor serat optik.
+5. **Step 5 - Foto Redaman:** Kirim foto layar ukur OPM (-dBm).
+6. **Step 6 - Foto Label:** Kirim foto stiker nomor label ODP terbaca jelas. *(Setelah foto ke-4 diunggah, sesi otomatis 100% SELESAI).*
 
-6. **Input TIANG Bersifat Global + Wajib Tagging Lokasi GPS (Aturan Radius Minimal 30 Meter)**
-   * Kategori TIANG bersifat global dan tidak memerlukan ODC/ODP induk.
-   * **Wajib melampirkan Foto Tiang Asli:** Dilarang mengunggah foto duplikat atau foto yang identik dengan tiang/perangkat lain yang sudah terdaftar di sistem.
-   * **Wajib Tagging Lokasi GPS:** Mengirimkan titik lokasi via tombol Telegram atau menu klip kertas -> Lokasi.
-   * **ATURAN VALIDASI RADIUS GPS (30 METER):**
-     * Sistem secara otomatis menghitung jarak koordinat tiang baru terhadap seluruh tiang yang sudah ada di database menggunakan kalkulasi presisi Haversine.
-     * Titik koordinat tiang baru **WAJIB BERJARAK LEBIH DARI 30 METER** dari tiang yang sudah terdaftar.
-     * Jika titik koordinat tiang (Titik A dan Titik B) berada di dalam radius $\le$ 30 meter atau koordinatnya sama persis, **bot akan otomatis menolak lokasi tersebut** dan mewajibkan teknisi untuk mengambil/mengirim ulang titik koordinat GPS yang benar di lokasi fisik tiang yang bersangkutan.
+---
 
-4. **Kategori MODEM**
-   * Kirim foto fisik modem dan nomor pelanggan/SN.
+### 🪵 Alur Wajib 3 Step TIANG:
+1. **Step 1 - Label Tiang:** Kirim nama/label tiang (misal `TIANG-SKD-01`).
+2. **Step 2 - Foto Evident Tiang:** Kirim foto fisik tiang asli tegak di lapangan (termasuk deteksi buram & anti duplikasi).
+3. **Step 3 - Share Loc GPS Tiang:** Tekan tombol `[📍 Kirim Lokasi Tiang Sekarang]` (Wajib radius minimal > 30 meter dari tiang lain). *(Selesai & tersimpan ke Supabase).*
 
-5. **Pemeriksaan Kualitas Foto Otomatis oleh Script (Jelas vs Buram)**
-   * Script bot secara matematis menganalisa ketajaman piksel foto (Laplacian Variance & Edge Gradient).
-   * Foto yang buram, goyang (motion blur), out-of-focus, atau terlalu gelap/silau akan **otomatis ditolak oleh script**.
-   * Script langsung meminta teknisi mengambil foto ulang di lapangan.
+---
 
-6. **Pencegahan & Penolakan Otomatis Foto Duplicate (Anti-Fraud)**
-   * Bot memiliki sistem deteksi ganda (**SHA-256** untuk berkas identik + **Perceptual dHash 64-bit** untuk foto hasil screenshot/forward WhatsApp/kompresi ulang).
-   * Jika ada teknisi atau pengguna siapapun yang mengunggah foto yang pernah di-upload sebelumnya, **bot akan otomatis menolak foto tersebut**.
-   * Bot akan menampilkan rincian pengunggah pertama, waktu upload, dan label perangkat foto asli, serta mewajibkan foto baru real-time di lapangan.
+### 💻 Alur Wajib 7 Step MODEM:
+1. **Step 1 - Share Loc GPS Modem:** Tekan tombol `[📍 Kirim Share Loc Modem]`.
+2. **Step 2 - Label ODP Induk:** Masukkan label ODP yang terdaftar (misal `ODP-SKD 01/01`).
+3. **Step 3 - ID Pelanggan:** Ketik ID Pelanggan.
+4. **Step 4 - Nama Pelanggan:** Ketik nama lengkap pelanggan.
+5. **Step 5 - SN Modem:** Ketik Serial Number (SN) perangkat modem.
+6. **Step 6 - Foto Tampak Depan:** Unggah foto depan modem (lampu indikator menyala).
+7. **Step 7 - Foto Tampak Belakang:** Unggah foto belakang modem (stiker barcode & SN terbaca jelas). *(Selesai 100%).*
 
-7. **Pencegahan & Pembatalan Otomatis Share Loc Manual (Wajib Klik Tombol Bot)**
-   * Bot otomatis memeriksa integritas koordinat GPS (`horizontal_accuracy`, sensor hardware, dan forward status).
-   * Jika teknisi mencoba mengirim lokasi **manual** (seperti menggeser pin peta secara manual, memilih nama tempat/venue buatan, atau meneruskan lokasi dari chat lain), **bot akan otomatis MEMBATALKAN / MENOLAK share loc tersebut**.
-   * Teknisi wajib berada langsung di lokasi fisik dan menekan tombol keyboard bawaan yang disediakan oleh bot:
-     - `[📍 Kirim Lokasi GPS ODC Sekarang]`
-     - `[📍 Kirim Lokasi GPS ODP Sekarang]`
-     - `[📍 Kirim Lokasi Tiang Sekarang]`
-     - `[📍 Kirim Share Loc Modem]`
+---
+
+### 🔒 Proteksi Anti-Skip & Keamanan Data
+* **Tombol Menu Terkunci (`🔒 Terkunci`):** Menu pemilihan jenis foto mengunci tombol yang belum tiba gilirannya. Hanya tombol bertanda `👉 Wajib Sekarang` yang dapat dipilih.
+* **Perintah Langsung Diblokir:** Mengetik `/tampak_dalam`, `/redaman`, atau `/label` secara manual sebelum urutan sebelumnya selesai akan ditolak oleh bot.
+* **Teks Biasa Diblokir Saat Menunggu Foto/Lokasi:** Jika teknisi mengetik teks biasa ketika bot sedang menunggu foto atau shareloc, bot akan menolak dan mengarahkan kembali ke step yang sedang aktif.
+* **Foto Diblokir Saat Menunggu GPS/Label:** Mengirim foto sebelum shareloc diterima atau sebelum label diinput akan langsung ditolak bot.
+* **Anti Selesai Prematur:** Tombol `[🏁 SELESAI]` atau perintah `/done` / `/selesai` **DITOLAK** jika 4 foto dan koordinat GPS belum lengkap 100%. Sesi hanya bisa ditutup jika seluruh syarat sudah lengkap!
 
 ---
 
