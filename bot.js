@@ -1505,15 +1505,15 @@ async function startModemFlow(ctx, initialOdpText = null) {
     await ctx.reply(
         `💻 *INPUT DATA EVIDENT MODEM PELANGGAN*\n\n` +
         `📍 *LANGKAH 1/6: SILAKAN BAGIKAN SHARE LOC GPS PELANGGAN!*\n\n` +
-        `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
-        `Setiap pemasangan modem pelanggan wajib disertai titik lokasi GPS (Share Loc).\n\n` +
-        `👉 *Tekan tombol "📍 Kirim Share Loc Modem" di bawah sekarang:*\n` +
-        `_(Atau pilih "⏭ Lewati (Skip) Share Loc" jika GPS belum dapat diambil saat ini)_`,
+        `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+        `Setiap pemasangan modem pelanggan **WAJIB** disertai titik lokasi GPS (Share Loc).\n` +
+        `⚠️ *Share loc wajib dikirim melalui tombol di bawah (dilarang manual / tidak dapat dilewati).*\n\n` +
+        `👉 *Tekan tombol "📍 Kirim Share Loc Modem" di bawah keyboard sekarang:*`,
         {
             parse_mode: 'Markdown',
             ...Markup.keyboard([
                 [Markup.button.locationRequest('📍 Kirim Share Loc Modem')],
-                ['⏭ Lewati (Skip) Share Loc', '❌ Batalkan Sesi']
+                ['❌ Batalkan Sesi']
             ]).resize()
         }
     );
@@ -1699,63 +1699,48 @@ bot.hears(['❌ Batalkan Sesi', 'Batal', 'batal', 'cancel'], (ctx) => {
     ctx.reply("👌 Sesi telah dibatalkan. Silakan pilih menu:", buildMainInlineMenu());
 });
 
-// Handler SKIP Share Loc Modem (tombol ⏭ Lewati)
+// Penolakan Tombol / Perintah SKIP Share Loc (Share Loc Hukumnya Wajib)
 bot.hears(['⏭ Lewati (Skip) Share Loc', 'Lewati', 'skip', 'Skip'], async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const session = getSession(chatId);
     
-    // Jika lewati saat di langkah awal (sebelum input ODP)
-    if (session.category === 'MODEM' && session.step === 'waiting_modem_location') {
-        session.latitude = null;
-        session.longitude = null;
-        session.locationUrl = null;
-        session.step = 'waiting_modem_odp';
-
+    if (session.category === 'MODEM' || session.step === 'waiting_modem_location' || session.step === 'waiting_modem_shareloc') {
         return ctx.reply(
-            `⚠️ *Share Loc Dilewati.* Anda dapat menambahkan koordinat GPS nanti di Web Dashboard.\n\n` +
-            `👉 *Langkah 2/6: Silakan masukkan LABEL ODP tempat modem tersambung:*\n` +
-            `📌 *Format Wajib:* \`ODP-(WILAYAH) (NO_ODC)/(NO_ODP)\`\n` +
-            `💡 *Contoh Penulisan:* \`ODP-SKD 01/01\`\n\n` +
-            `_(Ketik label ODP sekarang)_`,
+            `🚫 *SHARE LOC MODEM HUKUMNYA WAJIB DAN TIDAK BISA DILEWATI!*\n\n` +
+            `📜 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
+            `Setiap pemasangan modem pelanggan **WAJIB** melampirkan titik koordinat GPS asli di lokasi rumah pelanggan agar terdata akurat di Web Dashboard & Peta GIS.\n\n` +
+            `👉 *Silakan tekan tombol "📍 Kirim Share Loc Modem" di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
-                ...Markup.removeKeyboard(),
-                ...Markup.inlineKeyboard([
-                    [Markup.button.callback('❌ Batal', 'action_cancel')]
-                ])
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest('📍 Kirim Share Loc Modem')],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
             }
         );
     }
 
-    if (session.step === 'waiting_modem_shareloc' && session.category === 'MODEM') {
-        const odpRef = session.odpReference || '-';
-        const odcCat = session.odcReference || session.category;
-        const cId   = session.customerId || '-';
-        const cName = session.customerName || '-';
-        const sn    = session.modemSn || '-';
-        clearSession(chatId);
+    if (session.category === 'ODC' || session.category === 'ODP' || session.category === 'TIANG') {
+        let btnText = '📍 Kirim Lokasi GPS Sekarang';
+        if (session.category === 'ODC') btnText = '📍 Kirim Lokasi GPS ODC Sekarang';
+        if (session.category === 'ODP') btnText = '📍 Kirim Lokasi GPS ODP Sekarang';
+        if (session.category === 'TIANG') btnText = '📍 Kirim Lokasi Tiang Sekarang';
+
         return ctx.reply(
-            `✅ *EVIDENT MODEM TERSIMPAN (Tanpa Share Loc)*\n\n` +
-            `📋 *Rincian:*\n` +
-            `• 🏷 *ODP:* \`${odpRef}\`\n` +
-            `• 🆔 *ID Pelanggan:* \`${cId}\`\n` +
-            `• 👤 *Nama:* \`${cName}\`\n` +
-            `• 📟 *SN Modem:* \`${sn}\`\n\n` +
-            `ℹ️ _Share Loc dilewati. Owner dapat menambahkan koordinat GPS secara manual di Web Dashboard._\n\n` +
-            `👇 *Pilih menu berikutnya:*`,
+            `🚫 *SHARE LOC GPS WAJIB DIKIRIM (TIDAK DAPAT DILEWATI)!*\n\n` +
+            `Sesuai SOP, titik koordinat perangkat **wajib** dikirim menggunakan tombol resmi yang disediakan bot.\n\n` +
+            `👉 *Silakan tekan tombol di bawah keyboard:*`,
             {
                 parse_mode: 'Markdown',
-                ...Markup.removeKeyboard(),
-                ...Markup.inlineKeyboard([
-                    [Markup.button.callback('💻 Input Modem Lain', 'start_modem')],
-                    [Markup.button.callback('📤 Upload Kategori Lain', 'action_open_upload')],
-                    [Markup.button.callback('📊 Cek Status', 'action_open_status')]
-                ])
+                ...Markup.keyboard([
+                    [Markup.button.locationRequest(btnText)],
+                    ['❌ Batalkan Sesi']
+                ]).resize()
             }
         );
     }
-    clearSession(chatId);
-    ctx.reply("👌 Dilewati. Silakan pilih menu:", buildMainInlineMenu());
+
+    ctx.reply("⚠️ Perintah tidak valid. Silakan pilih menu:", buildMainInlineMenu());
 });
 
 bot.action('start_odc', async (ctx) => {
@@ -2920,7 +2905,7 @@ bot.on('location', async (ctx) => {
 
         if (session.category === 'MODEM') {
             btnText = '📍 Kirim Share Loc Modem';
-            extraBtns = ['⏭ Lewati (Skip) Share Loc', '❌ Batalkan Sesi'];
+            extraBtns = ['❌ Batalkan Sesi'];
         } else if (session.category === 'ODC') {
             btnText = '📍 Kirim Lokasi GPS ODC Sekarang';
         } else if (session.category === 'ODP') {
@@ -3240,7 +3225,7 @@ bot.on('venue', async (ctx) => {
 
     if (session.category === 'MODEM') {
         btnText = '📍 Kirim Share Loc Modem';
-        extraBtns = ['⏭ Lewati (Skip) Share Loc', '❌ Batalkan Sesi'];
+        extraBtns = ['❌ Batalkan Sesi'];
     } else if (session.category === 'ODC') {
         btnText = '📍 Kirim Lokasi GPS ODC Sekarang';
     } else if (session.category === 'ODP') {
@@ -3909,13 +3894,13 @@ bot.on(['photo', 'document'], async (ctx) => {
                 `• 📷 *Foto 2:* Tampak Belakang & SN Jelas (Tersimpan)\n\n` +
                 `📂 *Kedua evident foto modem otomatis masuk ke folder \`${odcCat}\` di Web Dashboard.*\n\n` +
                 `📍 *MOHON BAGIKAN SHARE LOC GPS MODEM PELANGGAN:*\n` +
-                `Silakan kirimkan titik lokasi GPS rumah/instalasi pelanggan agar tercatat di peta.\n\n` +
-                `👇 Tekan tombol **📍 Kirim Share Loc Modem** di bawah:`,
+                `SOP: Share loc wajib dikirim melalui tombol di bawah agar titik rumah pelanggan terpetakan di Dashboard GIS.\n\n` +
+                `👇 Tekan tombol **📍 Kirim Share Loc Modem** di bawah keyboard sekarang:`,
                 {
                     parse_mode: 'Markdown',
                     ...Markup.keyboard([
                         [Markup.button.locationRequest('📍 Kirim Share Loc Modem')],
-                        ['⏭ Lewati (Skip) Share Loc', '❌ Batalkan Sesi']
+                        ['❌ Batalkan Sesi']
                     ]).resize()
                 }
             );
