@@ -15,6 +15,7 @@ let currentPreviewId = null;
 
 // Bersihkan cache lama jika ada
 try { localStorage.removeItem('evident_deleted_categories'); } catch (e) {}
+try { localStorage.removeItem('evident_cached_vault'); } catch (e) {}
 
 // Fungsi helper: Cek apakah user saat ini adalah Owner Project
 function checkIsOwner() {
@@ -3127,10 +3128,30 @@ function buildRow(item, canEdit, isOdcHeader = false, isChild = false) {
             : '<i class="fa-solid fa-turn-up fa-rotate-90 text-indigo-400 text-[9px] mr-1" title="Evident ODP Anak"></i>')
         : '';
 
-    const odcGroup = getItemOdcGroup(item);
-    const categoryBadge = odcGroup 
-        ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200/60 rounded text-[10.5px] font-semibold inline-flex items-center gap-1"><i class="fa-solid fa-folder text-[9px]"></i> ${escapeHtml(odcGroup)}</span>`
-        : `<span class="px-2 py-0.5 ${item.category === 'TIANG' ? 'bg-amber-50 text-amber-700 border border-amber-200/60' : (isModemItem ? 'bg-cyan-50 text-cyan-700 border border-cyan-200/60' : 'bg-slate-100 text-slate-700')} rounded text-[10.5px] font-semibold">${escapeHtml(item.category)}</span>`;
+    // Badge Kategori: Selalu tampilkan salah satu dari 4 kategori utama (ODC, ODP, TIANG, MODEM)
+    let displayCat = 'ODC';
+    let catBadgeColor = 'bg-blue-50 text-blue-700 border-blue-200/60';
+    let catIcon = 'fa-folder';
+
+    if (item.category === 'TIANG' || (item.deviceLabel && (item.deviceLabel.startsWith('TIANG') || item.deviceLabel.startsWith('T.')))) {
+        displayCat = 'TIANG';
+        catBadgeColor = 'bg-amber-50 text-amber-700 border-amber-200/60';
+        catIcon = 'fa-tower-broadcast';
+    } else if (isModemItem) {
+        displayCat = 'MODEM';
+        catBadgeColor = 'bg-cyan-50 text-cyan-700 border-cyan-200/60';
+        catIcon = 'fa-house-signal';
+    } else if (item.category === 'ODP' || (item.deviceLabel && item.deviceLabel.startsWith('ODP'))) {
+        displayCat = 'ODP';
+        catBadgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200/60';
+        catIcon = 'fa-network-wired';
+    } else {
+        displayCat = 'ODC';
+        catBadgeColor = 'bg-blue-50 text-blue-700 border-blue-200/60';
+        catIcon = 'fa-folder';
+    }
+
+    const categoryBadge = `<span class="px-2 py-0.5 ${catBadgeColor} border rounded text-[10.5px] font-semibold inline-flex items-center gap-1"><i class="fa-solid ${catIcon} text-[9px]"></i> ${displayCat}</span>`;
 
     let labelBadge = '';
     if (item.deviceLabel) {
