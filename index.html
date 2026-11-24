@@ -275,9 +275,18 @@
                     <span class="text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full"
                         id="folderCountBadge">4 Folder Utama</span>
                 </div>
-                <!-- Search bar disembunyikan karena folder sudah tetap: ODC, ODP, TIANG, MODEM -->
-                <input type="hidden" id="categoryFolderSearch">
-                <input type="hidden" id="clearCatSearchBtn">
+                <!-- Search & Filter Cepat untuk Kategori Tertentu -->
+                <div class="relative w-full sm:w-72">
+                    <i class="fa-solid fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" id="categoryFolderSearch" oninput="filterFolderGrid()"
+                        placeholder="Cari kategori / ODC... (mis: SKD 01, TIANG)"
+                        class="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
+                    <button id="clearCatSearchBtn" onclick="clearCatFolderSearch()"
+                        class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+                        title="Hapus filter kategori">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
             </div>
             <div id="folderGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5"></div>
         </section>
@@ -351,47 +360,6 @@
                 <!-- Quick Filter Category Pills -->
                 <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100"
                     id="categoryFilterContainer"></div>
-            </div>
-
-            <!-- ODC Unit Matrix Section (Tampil saat Kategori ODC Aktif) -->
-            <div id="odcUnitMatrixSection"
-                class="hidden px-4 py-3 bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-slate-50 border-b border-blue-100 space-y-2.5">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="w-6 h-6 rounded-md bg-blue-600 text-white flex items-center justify-center text-[11px] shadow-2xs">
-                            <i class="fa-solid fa-server"></i>
-                        </span>
-                        <h4 class="text-xs font-bold text-slate-800" id="odcMatrixTitle">Matriks Kelengkapan 4 Foto Perangkat ODC</h4>
-                        <span class="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full border border-blue-200"
-                            id="odcMatrixUnitCount">0 Unit ODC</span>
-                    </div>
-                    <div class="flex items-center gap-2 text-xs">
-                        <span class="text-[10px] text-slate-500 font-medium hidden sm:inline"><i class="fa-solid fa-arrow-down-wide-short mr-1 text-blue-500"></i>Upload Terkini di Atas</span>
-                        <button type="button" onclick="toggleOdcMatrixCollapse()" id="btnToggleOdcMatrix"
-                            class="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[10.5px] font-bold flex items-center gap-1.5 transition shadow-2xs">
-                            <i class="fa-solid fa-chevron-up text-[9px]" id="iconToggleOdcMatrix"></i>
-                            <span id="textToggleOdcMatrix">Sembunyikan Matriks</span>
-                        </button>
-                    </div>
-                </div>
-                <div id="odcMatrixTableWrapper" class="overflow-x-auto rounded-lg border border-blue-200/80 bg-white shadow-2xs">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="bg-blue-50/90 border-b border-blue-200/90 text-blue-800 text-[10px] font-bold uppercase tracking-wider">
-                                <th class="py-2 px-3 min-w-[130px]"><i class="fa-solid fa-folder mr-1 text-blue-600"></i>Nama ODC</th>
-                                <th class="py-2 px-3 text-center min-w-[65px]"><i class="fa-solid fa-location-dot mr-1 text-emerald-600"></i>Share Loc</th>
-                                <th class="py-2 px-3 text-center min-w-[55px]"><i class="fa-solid fa-door-open mr-1 text-blue-500"></i>Tampak Luar</th>
-                                <th class="py-2 px-3 text-center min-w-[55px]"><i class="fa-solid fa-boxes-stacked mr-1 text-indigo-500"></i>Tampak Dalam</th>
-                                <th class="py-2 px-3 text-center min-w-[55px]"><i class="fa-solid fa-gauge-high mr-1 text-orange-500"></i>Redaman</th>
-                                <th class="py-2 px-3 text-center min-w-[55px]"><i class="fa-solid fa-tag mr-1 text-purple-500"></i>Label</th>
-                                <th class="py-2 px-3"><i class="fa-solid fa-user-pen mr-1 text-slate-400"></i>Pengunggah</th>
-                                <th class="py-2 px-3"><i class="fa-solid fa-calendar mr-1 text-slate-400"></i>Tanggal Terkini</th>
-                                <th class="py-2 px-3 text-right">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody id="odcMatrixTableBody" class="divide-y divide-blue-100/60 text-xs"></tbody>
-                    </table>
-                </div>
             </div>
 
             <!-- ODP Dropdown Selector & Panel Pelanggan per ODP (Dinamis saat Kategori ODC Dipilih) -->
@@ -1000,8 +968,8 @@
     </div>
 
     <!-- Application JavaScript Scripts (Cache-Busted to Ensure Instant Update) -->
-    <script src="config.js?v=20261124_04"></script>
-    <script src="script.js?v=20261124_04"></script>
+    <script src="config.js?v=20261124_05"></script>
+    <script src="script.js?v=20261124_05"></script>
 </body>
 
 </html>

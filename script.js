@@ -2953,18 +2953,46 @@ function renderTable(data, isSearchMode = false) {
         return;
     }
 
-    // ===== PANEL KHUSUS: Matriks Status 4 Foto & GPS ODC =====
-    const isOdcCategory = Boolean(
-        currentCategory === 'ODC' || 
-        (typeof currentCategory === 'string' && currentCategory.toUpperCase().startsWith('ODC-'))
-    );
-    const odcSectionEl = document.getElementById('odcUnitMatrixSection');
+    // ===== MODE KHUSUS: Folder ODC → Tampilkan tabel grouped per unit ODC =====
+    if (currentCategory === 'ODC' && !isSearchMode) {
+        setOdcTableHeader();
 
-    if (isOdcCategory && !isSearchMode) {
-        // Render Matriks Kelengkapan Perangkat ODC di panel atas tabel
-        renderOdcMatrixSection(data, canEdit);
-    } else if (odcSectionEl) {
-        odcSectionEl.classList.add('hidden');
+        const odcData = data && data.length > 0 ? data : sampleData.filter(item => isItemMatchingCategory(item, 'ODC'));
+
+        if (!odcData || odcData.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="py-10 text-center text-slate-400">
+                        <i class="fa-solid fa-folder-open text-2xl text-slate-300 mb-1.5 block"></i>
+                        <p class="font-medium text-xs">Belum ada berkas evident ODC yang tersimpan.</p>
+                    </td>
+                </tr>
+            `;
+            updateStats();
+            return;
+        }
+
+        // Grup berdasarkan nama unit ODC
+        const odcGroups = {};
+        odcData.forEach(item => {
+            const unitName = getOdcUnitName(item);
+            if (!odcGroups[unitName]) odcGroups[unitName] = [];
+            odcGroups[unitName].push(item);
+        });
+
+        // Urutkan nama ODC: unit dengan upload terbaru di atas
+        const sortedNames = Object.keys(odcGroups).sort((a, b) => {
+            const maxIdA = Math.max(...odcGroups[a].map(it => it.id || 0));
+            const maxIdB = Math.max(...odcGroups[b].map(it => it.id || 0));
+            return maxIdB - maxIdA;
+        });
+
+        sortedNames.forEach(name => {
+            tbody.appendChild(buildOdcGroupedRow(name, odcGroups[name], canEdit));
+        });
+
+        updateStats();
+        return;
     }
 
     // ===== MODE KHUSUS: Folder TIANG → Tampilkan tabel format khusus Tiang =====
