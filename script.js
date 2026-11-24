@@ -150,20 +150,35 @@ function parseModemInfo(deviceLabel, name) {
     let modemSn = null;
     let photoType = null;
 
+    // JIKA perangkat adalah ODC murni, ODP murni, atau TIANG murni tanpa kata MODEM,
+    // JANGAN parse sebagai modem agar nama ODC seperti "ODC-CHSN 01" tidak keliru mengekstrak "SN 01" sebagai modem SN!
+    const upperText = text.toUpperCase();
+    const isExplicitNonModem = (upperText.includes('ODC') || upperText.includes('ODP') || upperText.includes('TIANG')) && !upperText.includes('MODEM');
+    if (isExplicitNonModem) {
+        const mType = text.match(/\[(TAMPAK\s+DEPAN|TAMPAK\s+BELAKANG|TAMPAK\s+LUAR|TAMPAK\s+DALAM|REDAMAN|LABEL|DEPAN|BELAKANG)\]/i);
+        if (mType) {
+            let t = mType[1].toUpperCase();
+            if (t === 'DEPAN') t = 'TAMPAK DEPAN';
+            if (t === 'BELAKANG') t = 'TAMPAK BELAKANG';
+            photoType = t;
+        }
+        return { customerId: null, customerName: null, modemSn: null, photoType };
+    }
+
     // 1. Ekstrak ID Pelanggan LENGKAP (tidak dipotong)
     // Format: "ID: 100293", "ID Pelanggan: 100293", "_ID_100293_", "ID-100293"
-    const mId = text.match(/(?:ID(?:\s*Pelanggan)?[:\s-]+|_ID_)([^|\n\r\[\]_]+)/i) ||
+    const mId = text.match(/(?:\bID(?:\s*Pelanggan)?[:\s-]+|_ID_)([^|\n\r\[\]_]+)/i) ||
                 text.match(/\b(ID-[A-Za-z0-9_-]+)\b/i);
     if (mId) customerId = mId[1].replace(/^_+|_+$/g, '').trim();
 
     // 2. Ekstrak Nama Pelanggan
     // Format: "Nama: Bpk. Bambang", "Nama Pelanggan: Bambang", "Pelanggan: Bambang"
-    const mName = text.match(/(?:Nama(?:\s*Pelanggan)?|Pelanggan)[:\s-]+([^|\[\]\n\r_]+)/i);
+    const mName = text.match(/(?:\bNama(?:\s*Pelanggan)?|\bPelanggan)[:\s-]+([^|\[\]\n\r_]+)/i);
     if (mName) customerName = mName[1].trim();
 
     // 3. Ekstrak SN Modem
-    // Format: "SN: ZTEGC123", "SN Modem: ZTEGC123", "_SN_ZTEGC123_"
-    const mSn = text.match(/(?:SN(?:\s*Modem)?[:\s-]+|_SN_)([A-Za-z0-9_-]+)/i);
+    // Wajib diawali word boundary \b agar tidak salah mencocokkan ODC-CHSN 01 menjadi SN 01
+    const mSn = text.match(/(?:\bSN(?:\s*Modem)?[:\s-]+|_SN_)([A-Za-z0-9_-]+)/i);
     if (mSn) modemSn = mSn[1].replace(/^_+|_+$/g, '').trim();
 
     // 4. Ekstrak Jenis Foto Modem
@@ -357,7 +372,7 @@ function getCustomerListForOdp(odpName) {
 function getOdpListForCategory(cat) {
     if (!sampleData || sampleData.length === 0) return [];
     const isAll = !cat || cat === 'all';
-    const isOdc = cat && cat.toUpperCase().startsWith('ODC-');
+    const isOdc = cat && (cat.toUpperCase() === 'ODC' || cat.toUpperCase().startsWith('ODC'));
     const isModem = cat && cat.toUpperCase() === 'MODEM';
 
     const odpMap = new Map();
@@ -368,7 +383,7 @@ function getOdpListForCategory(cat) {
             match = true;
         } else if (isOdc) {
             const itemOdc = getItemOdcGroup(item);
-            match = (itemOdc === cat) || (item.category === cat) || (item.odcReference === cat);
+            match = (itemOdc === cat) || (item.category === cat) || (item.odcReference === cat) || (cat.toUpperCase() === 'ODC' && isItemMatchingCategory(item, 'ODC'));
         } else if (isModem) {
             match = Boolean(item.customerId || item.customerName || item.modemSn || (item.category && item.category.toUpperCase() === 'MODEM'));
         } else {
@@ -1131,10 +1146,10 @@ function isItemMatchingCategory(item, targetCat) {
         const refOdc = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
 
         // Jangan masukkan evident modem pelanggan, ODP murni, atau TIANG ke folder master ODC
-        const isModem = dLabel.includes('MODEM') || fName.includes('MODEM') || Boolean(item.customerId || item.modemSn);
+        const isModem = dLabel.includes('MODEM') || fName.includes('MODEM') || itemCat === 'MODEM';
         if (isModem) return false;
 
-        const isOdp = dLabel.startsWith('ODP') || fName.startsWith('EVIDENT_ODP');
+        const isOdp = dLabel.startsWith('ODP') || fName.startsWith('EVIDENT_ODP') || itemCat === 'ODP';
         if (isOdp) return false;
 
         const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
@@ -1156,7 +1171,7 @@ function isItemMatchingCategory(item, targetCat) {
         const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
         if (isTiang) return false;
 
-        const isModem = dLabel.includes('MODEM') || Boolean(item.customerId || item.modemSn);
+        const isModem = dLabel.includes('MODEM') || fName.includes('MODEM') || itemCat === 'MODEM';
         if (!isModem && (itemCat === 'ODP' || dLabel.startsWith('ODP') || fName.includes('ODP') || Boolean(item.odpName) || Boolean(item.odpReference))) {
             return true;
         }
@@ -1176,14 +1191,7 @@ function isItemMatchingCategory(item, targetCat) {
 
     // 4. Khusus kategori MODEM: Satukan seluruh berkas MODEM ke dalam folder MODEM
     if (tNorm === 'MODEM') {
-        if ((item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
-            (item.name && item.name.toUpperCase().includes('MODEM')) ||
-            (item.photoType && item.photoType.toUpperCase() === 'MODEM') ||
-            (item.category && item.category.toUpperCase() === 'MODEM') ||
-            Boolean(item.customerId || item.customerName || item.modemSn)) {
-            return true;
-        }
-        return false;
+        return isModemEvident(item);
     }
 
     // Fallback: pencocokan langsung
@@ -1620,7 +1628,9 @@ function renderOdcDropdownInSearch() {
             const ref = item.odcReference || item.odc_reference || '';
             if (ref && ref.toUpperCase().startsWith('ODC')) odcSet.add(ref.trim());
             const cat = item.category || '';
-            if (cat.toUpperCase().startsWith('ODC')) odcSet.add(cat.trim());
+            if (cat.toUpperCase().startsWith('ODC') && cat.toUpperCase() !== 'ODC') odcSet.add(cat.trim());
+            const unit = getOdcUnitName(item);
+            if (unit && unit.toUpperCase().startsWith('ODC') && unit.toUpperCase() !== 'ODC') odcSet.add(unit.trim());
         });
         const odcList = Array.from(odcSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
         const currentVal = dropdown.value;
@@ -2021,8 +2031,11 @@ function setOdpTableHeader() {
 function buildOdpGroupedRow(odpName, items, canEdit) {
     const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
     const matchType = (item, ...types) => {
-        const ptype = norm(item.photoType);
+        const itemCat = (item.category || '').toUpperCase();
         const dname = norm(item.deviceLabel);
+        if (itemCat === 'ODP' || dname.startsWith('ODP')) return false;
+
+        const ptype = norm(item.photoType);
         const fname = norm(item.name);
         return types.some(t => {
             const nt = norm(t);
@@ -2282,6 +2295,7 @@ function setDefaultTableHeader() {
             <th class="py-2.5 px-3">Nama Pelanggan</th>
             <th class="py-2.5 px-3">SN Modem</th>
             <th class="py-2.5 px-3">Nama ODP</th>
+            <th class="py-2.5 px-3 text-center">Kategori</th>
             <th class="py-2.5 px-3">Pengunggah</th>
             <th class="py-2.5 px-3">Tanggal &amp; Waktu</th>
             <th class="py-2.5 px-3 text-right">Aksi</th>
@@ -2294,8 +2308,11 @@ function buildOdcGroupedRow(odcName, items, canEdit) {
     // Cari foto per jenis dari semua item yang termasuk unit ODC ini
     const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
     const matchType = (item, ...types) => {
-        const ptype = norm(item.photoType);
+        const itemCat = (item.category || '').toUpperCase();
         const dname = norm(item.deviceLabel);
+        if (itemCat === 'ODP' || dname.startsWith('ODP')) return false;
+
+        const ptype = norm(item.photoType);
         const fname = norm(item.name);
         return types.some(t => {
             const nt = norm(t);
@@ -3318,6 +3335,22 @@ function buildRow(item, canEdit, isOdcHeader = false, isChild = false) {
            </td>`
         : `<td class="py-2 px-3 text-slate-300 text-[10.5px] font-mono">-</td>`;
 
+    // 5. Kolom Kategori (badge berwarna sesuai kategori)
+    const catUpper = (item.category || '').toUpperCase();
+    const catBadgeClass = catUpper === 'ODC'
+        ? 'bg-blue-50 text-blue-700 border-blue-200'
+        : (catUpper === 'ODP'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : (catUpper === 'TIANG'
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-cyan-50 text-cyan-700 border-cyan-200'));
+
+    const categoryCell = `<td class="py-2 px-3 text-center">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${catBadgeClass} whitespace-nowrap shadow-2xs">
+            ${escapeHtml(item.category || '-')}
+        </span>
+    </td>`;
+
     tr.innerHTML = `
         <td class="py-2 px-3 font-semibold text-slate-800">
             <div class="flex items-center gap-2 flex-wrap">
@@ -3333,6 +3366,7 @@ function buildRow(item, canEdit, isOdcHeader = false, isChild = false) {
         ${nameCell}
         ${snCell}
         ${odpCell}
+        ${categoryCell}
         <td class="py-2 px-3 font-medium text-slate-700 text-[10.5px]">${escapeHtml(item.uploader)}</td>
         <td class="py-2 px-3 text-slate-400 text-[10.5px]">${escapeHtml(item.date)}</td>
         <td class="py-2 px-3 text-right whitespace-nowrap">
@@ -3793,13 +3827,22 @@ function toggleMapBasemap() {
 // Helper: Deteksi apakah item merupakan evident Modem / Pelanggan
 function isModemEvident(item) {
     if (!item) return false;
+    const cat = (item.category || '').toUpperCase();
+    const dLabel = (item.deviceLabel || '').toUpperCase();
+    const fName = (item.name || '').toUpperCase();
+
+    // Jika berkas adalah ODC, ODP, atau TIANG murni tanpa indikasi MODEM, jangan klasifikasikan sebagai modem
+    if ((cat === 'ODC' || dLabel.startsWith('ODC') || fName.startsWith('EVIDENT_ODC')) && !dLabel.includes('MODEM') && !fName.includes('MODEM')) return false;
+    if ((cat === 'ODP' || dLabel.startsWith('ODP') || fName.startsWith('EVIDENT_ODP')) && !dLabel.includes('MODEM') && !fName.includes('MODEM')) return false;
+    if ((cat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG')) && !dLabel.includes('MODEM') && !fName.includes('MODEM')) return false;
+
     return Boolean(
+        cat === 'MODEM' ||
+        dLabel.includes('MODEM') ||
+        fName.includes('MODEM') ||
         item.customerId ||
         item.customerName ||
-        item.modemSn ||
-        (item.category && item.category.toUpperCase() === 'MODEM') ||
-        (item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
-        (item.name && item.name.toUpperCase().includes('MODEM'))
+        item.modemSn
     );
 }
 
