@@ -1122,13 +1122,14 @@ function isItemMatchingCategory(item, targetCat) {
 
     const tNorm = targetCat.trim().toUpperCase();
 
-    // 1. Khusus kategori ODC: Satukan seluruh berkas ODC ke dalam folder ODC
+    // 1. Khusus kategori MASTER ODC: Satukan seluruh berkas ODC ke dalam folder ODC
     if (tNorm === 'ODC') {
         const dLabel = (item.deviceLabel || '').trim().toUpperCase();
         const fName = (item.name || '').trim().toUpperCase();
         const itemCat = (item.category || '').trim().toUpperCase();
+        const refOdc = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
 
-        // Jangan masukkan evident modem pelanggan, ODP murni, atau TIANG ke folder ODC
+        // Jangan masukkan evident modem pelanggan, ODP murni, atau TIANG ke folder master ODC
         const isModem = dLabel.includes('MODEM') || fName.includes('MODEM') || Boolean(item.customerId || item.modemSn);
         if (isModem) return false;
 
@@ -1141,11 +1142,35 @@ function isItemMatchingCategory(item, targetCat) {
         if (itemCat === 'ODC' || itemCat.startsWith('ODC')) return true;
         if (dLabel.startsWith('ODC')) return true;
         if (fName.includes('ODC')) return true;
+        if (refOdc.startsWith('ODC')) return true;
         if (getItemOdcGroup(item)) return true;
         return false;
     }
 
-    // 2. Khusus kategori MODEM
+    // 2. Khusus unit ODC tertentu (misal: ODC-RWT 99, ODC-SKD 01, ODC-CHSN 01)
+    if (tNorm.startsWith('ODC-')) {
+        const dLabel = (item.deviceLabel || '').trim().toUpperCase();
+        const fName = (item.name || '').trim().toUpperCase();
+        const itemCat = (item.category || '').trim().toUpperCase();
+        const refOdc = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
+        const grpOdc = (getItemOdcGroup(item) || '').trim().toUpperCase();
+        const unitName = (getOdcUnitName(item) || '').trim().toUpperCase();
+        const tClean = tNorm.replace(/[\s_-]+/g, '');
+
+        // Jangan masukkan tiang
+        const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
+        if (isTiang) return false;
+
+        if (itemCat === tNorm || (itemCat && itemCat.replace(/[\s_-]+/g, '') === tClean)) return true;
+        if (refOdc === tNorm || (refOdc && refOdc.replace(/[\s_-]+/g, '') === tClean)) return true;
+        if (grpOdc === tNorm || (grpOdc && grpOdc.replace(/[\s_-]+/g, '') === tClean)) return true;
+        if (unitName === tNorm || (unitName && unitName.replace(/[\s_-]+/g, '') === tClean)) return true;
+        if (dLabel.startsWith(tNorm) || dLabel.replace(/[\s_-]+/g, '').startsWith(tClean)) return true;
+        if (fName.includes(tClean)) return true;
+        return false;
+    }
+
+    // 3. Khusus kategori MODEM
     if (tNorm === 'MODEM') {
         if ((item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
             (item.name && item.name.toUpperCase().includes('MODEM')) ||
@@ -1157,7 +1182,7 @@ function isItemMatchingCategory(item, targetCat) {
         return false;
     }
 
-    // 3. Khusus kategori ODP
+    // 4. Khusus kategori ODP
     if (tNorm === 'ODP') {
         const dLabel = (item.deviceLabel || '').trim().toUpperCase();
         const itemCat = (item.category || '').trim().toUpperCase();
@@ -1172,7 +1197,7 @@ function isItemMatchingCategory(item, targetCat) {
         return false;
     }
 
-    // 4. Khusus kategori TIANG
+    // 5. Khusus kategori TIANG
     if (tNorm === 'TIANG') {
         const itemCat = (item.category || '').trim().toUpperCase();
         const dLabel = (item.deviceLabel || '').trim().toUpperCase();
@@ -1183,7 +1208,7 @@ function isItemMatchingCategory(item, targetCat) {
         return false;
     }
 
-    // 5. Pencocokan langsung untuk kategori kustom lainnya
+    // 6. Pencocokan langsung untuk kategori kustom lainnya
     const tClean = tNorm.replace(/[\s_-]+/g, '');
     const itemCat = (item.category || '').trim().toUpperCase();
     if (itemCat === tNorm || (itemCat && itemCat.replace(/[\s_-]+/g, '') === tClean)) return true;
@@ -1194,7 +1219,7 @@ function isItemMatchingCategory(item, targetCat) {
     return false;
 }
 
-// Kumpulkan seluruh kategori: Satukan semua ODC ke 1 folder 'ODC', disusul TIANG, ODP, MODEM
+// Kumpulkan seluruh kategori: ODC master, TIANG, ODP, MODEM, serta unit ODC individu
 function extractAllCategories() {
     const catMap = new Map();
 
@@ -1209,11 +1234,9 @@ function extractAllCategories() {
         if (!c || typeof c !== 'string') return;
         const trimmed = c.trim();
         if (!trimmed) return;
-        // Semua kategori ODC (ODC, ODC-SKD 01, dll) disatukan ke folder 'ODC'
-        if (trimmed.toUpperCase().startsWith('ODC')) {
-            catMap.set('ODC', 'ODC');
-        } else if (!catMap.has(trimmed.toUpperCase())) {
-            catMap.set(trimmed.toUpperCase(), trimmed);
+        const upper = trimmed.toUpperCase();
+        if (!catMap.has(upper)) {
+            catMap.set(upper, trimmed);
         }
     });
 
@@ -1221,28 +1244,37 @@ function extractAllCategories() {
     (sampleData || []).forEach(item => {
         if (!item) return;
         
+        // Kategori langsung
         if (item.category && typeof item.category === 'string') {
             const cat = item.category.trim();
-            if (cat) {
-                if (cat.toUpperCase().startsWith('ODC')) {
-                    catMap.set('ODC', 'ODC');
-                } else if (!catMap.has(cat.toUpperCase())) {
-                    catMap.set(cat.toUpperCase(), cat);
-                }
+            if (cat && !catMap.has(cat.toUpperCase())) {
+                catMap.set(cat.toUpperCase(), cat);
             }
+        }
+
+        // Unit ODC spesifik (contoh: ODC-RWT 99, ODC-SKD 01)
+        const unitOdc = getOdcUnitName(item);
+        if (unitOdc && unitOdc.startsWith('ODC-') && !catMap.has(unitOdc.toUpperCase())) {
+            catMap.set(unitOdc.toUpperCase(), unitOdc);
         }
     });
 
     const standardOrder = ['ODC', 'TIANG', 'ODP', 'MODEM'];
 
-    // Urutkan kategori: ODC pertama, lalu TIANG, ODP, MODEM, kemudian kategori kustom alfabetis
+    // Urutkan kategori: ODC, TIANG, ODP, MODEM pertama, lalu ODC unit (ODC-xxx), kemudian kategori kustom alfabetis
     return Array.from(catMap.values()).sort((a, b) => {
         const orderA = standardOrder.indexOf(a.toUpperCase());
         const orderB = standardOrder.indexOf(b.toUpperCase());
         if (orderA !== -1 && orderB !== -1) return orderA - orderB;
         if (orderA !== -1) return -1;
         if (orderB !== -1) return 1;
-        return a.localeCompare(b);
+
+        const isOdcA = a.toUpperCase().startsWith('ODC-');
+        const isOdcB = b.toUpperCase().startsWith('ODC-');
+        if (isOdcA && !isOdcB) return -1;
+        if (!isOdcA && isOdcB) return 1;
+
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
     });
 }
 
@@ -2107,9 +2139,13 @@ function setOdpTableHeader() {
 function buildOdpGroupedRow(odpName, items, canEdit) {
     const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
     const matchType = (item, ...types) => {
-        const ptype = (item.photoType || '').toUpperCase();
-        const dname = (item.deviceLabel || item.name || '').toUpperCase();
-        return types.some(t => ptype.includes(norm(t)) || dname.includes(norm(t)));
+        const ptype = norm(item.photoType);
+        const dname = norm(item.deviceLabel);
+        const fname = norm(item.name);
+        return types.some(t => {
+            const nt = norm(t);
+            return ptype.includes(nt) || dname.includes(nt) || fname.includes(nt);
+        });
     };
 
     const findPhoto = (...types) => items.find(it => matchType(it, ...types)) || null;
@@ -2376,9 +2412,13 @@ function buildOdcGroupedRow(odcName, items, canEdit) {
     // Cari foto per jenis dari semua item yang termasuk unit ODC ini
     const norm = s => (s || '').toUpperCase().replace(/[\s_-]+/g, '');
     const matchType = (item, ...types) => {
-        const ptype = (item.photoType || '').toUpperCase();
-        const dname = (item.deviceLabel || item.name || '').toUpperCase();
-        return types.some(t => ptype.includes(norm(t)) || dname.includes(norm(t)));
+        const ptype = norm(item.photoType);
+        const dname = norm(item.deviceLabel);
+        const fname = norm(item.name);
+        return types.some(t => {
+            const nt = norm(t);
+            return ptype.includes(nt) || dname.includes(nt) || fname.includes(nt);
+        });
     };
 
     const findPhoto = (...types) => items.find(it => matchType(it, ...types)) || null;
@@ -2447,15 +2487,18 @@ function buildOdcGroupedRow(odcName, items, canEdit) {
         : '';
 
     const photoCount = items.length;
+    const hasPending = items.some(it => it.status === 'Pending Review');
+    const pendingBadge = hasPending ? `<span class="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.5 rounded ml-1 border border-amber-300">New</span>` : '';
 
     const tr = document.createElement('tr');
     tr.className = 'bg-blue-50/40 hover:bg-blue-50 border-b border-blue-100 transition';
     tr.innerHTML = `
         <td class="py-2.5 px-3">
             <div class="flex flex-col gap-0.5">
-                <span class="inline-flex items-center gap-1.5 font-bold text-blue-800 text-[11px]">
+                <span class="inline-flex items-center gap-1 font-bold text-blue-800 text-[11px]">
                     <i class="fa-solid fa-folder-closed text-blue-500 text-[10px]"></i>
                     ${escapeHtml(odcName)}
+                    ${pendingBadge}
                 </span>
                 <span class="text-[9.5px] text-slate-400">${photoCount} foto evident</span>
             </div>
@@ -2481,6 +2524,79 @@ function buildOdcGroupedRow(odcName, items, canEdit) {
     `;
     return tr;
 }
+
+// Render Panel Matriks Kelengkapan 4 Foto Perangkat ODC di atas tabel
+function renderOdcMatrixSection(odcData, canEdit) {
+    const section = document.getElementById('odcUnitMatrixSection');
+    const tbody = document.getElementById('odcMatrixTableBody');
+    const countBadge = document.getElementById('odcMatrixUnitCount');
+    if (!section || !tbody) return;
+
+    if (!odcData || odcData.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    // Filter data yang berkaitan dengan ODC
+    const odcItems = odcData.filter(item => {
+        const dLabel = (item.deviceLabel || '').toUpperCase();
+        const fName = (item.name || '').toUpperCase();
+        const itemCat = (item.category || '').toUpperCase();
+        const refOdc = (item.odcReference || item.odc_reference || '').toUpperCase();
+        const isModem = dLabel.includes('MODEM') || fName.includes('MODEM') || Boolean(item.customerId || item.modemSn);
+        const isOdp = dLabel.startsWith('ODP') || fName.startsWith('EVIDENT_ODP');
+        const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
+        if (isModem || isOdp || isTiang) return false;
+        return itemCat === 'ODC' || itemCat.startsWith('ODC') || dLabel.startsWith('ODC') || fName.includes('ODC') || refOdc.startsWith('ODC') || Boolean(getItemOdcGroup(item));
+    });
+
+    if (odcItems.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    section.classList.remove('hidden');
+
+    // Grup berdasarkan nama unit ODC
+    const odcGroups = {};
+    odcItems.forEach(item => {
+        const unitName = getOdcUnitName(item);
+        if (!odcGroups[unitName]) odcGroups[unitName] = [];
+        odcGroups[unitName].push(item);
+    });
+
+    const unitKeys = Object.keys(odcGroups);
+    if (countBadge) countBadge.innerText = `${unitKeys.length} Unit ODC (${odcItems.length} Foto)`;
+
+    // Urutkan: Unit dengan upload TERBARU (ID terbesar) di paling atas!
+    unitKeys.sort((a, b) => {
+        const maxIdA = Math.max(...odcGroups[a].map(it => it.id || 0));
+        const maxIdB = Math.max(...odcGroups[b].map(it => it.id || 0));
+        return maxIdB - maxIdA;
+    });
+
+    tbody.innerHTML = '';
+    unitKeys.forEach(name => {
+        tbody.appendChild(buildOdcGroupedRow(name, odcGroups[name], canEdit));
+    });
+}
+
+function toggleOdcMatrixCollapse() {
+    const wrapper = document.getElementById('odcMatrixTableWrapper');
+    const icon = document.getElementById('iconToggleOdcMatrix');
+    const text = document.getElementById('textToggleOdcMatrix');
+    if (!wrapper) return;
+    if (wrapper.classList.contains('hidden')) {
+        wrapper.classList.remove('hidden');
+        if (icon) icon.className = 'fa-solid fa-chevron-up text-[9px]';
+        if (text) text.innerText = 'Sembunyikan Matriks';
+    } else {
+        wrapper.classList.add('hidden');
+        if (icon) icon.className = 'fa-solid fa-chevron-down text-[9px]';
+        if (text) text.innerText = 'Buka Matriks Ringkasan';
+    }
+}
+window.toggleOdcMatrixCollapse = toggleOdcMatrixCollapse;
 
 // Helper: Hapus semua evident dalam satu grup ODC (Owner only)
 async function deleteOdcGroup(odcName, ids) {
@@ -2955,39 +3071,18 @@ function renderTable(data, isSearchMode = false) {
         return;
     }
 
-    // ===== MODE KHUSUS: Folder ODC → Tampilkan tabel grouped per unit ODC =====
-    if (currentCategory === 'ODC' && !isSearchMode && currentOdpFilter === 'all') {
-        setOdcTableHeader();
+    // ===== PANEL KHUSUS: Matriks Status 4 Foto & GPS ODC =====
+    const isOdcCategory = Boolean(
+        currentCategory === 'ODC' || 
+        (typeof currentCategory === 'string' && currentCategory.toUpperCase().startsWith('ODC-'))
+    );
+    const odcSectionEl = document.getElementById('odcUnitMatrixSection');
 
-        if (!data || data.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="py-10 text-center text-slate-400">
-                        <i class="fa-solid fa-folder-open text-2xl text-slate-300 mb-1.5 block"></i>
-                        <p class="font-medium text-xs">Belum ada berkas evident ODC yang tersimpan.</p>
-                    </td>
-                </tr>
-            `;
-            updateStats();
-            return;
-        }
-
-        // Grup berdasarkan nama unit ODC
-        const odcGroups = {};
-        data.forEach(item => {
-            const unitName = getOdcUnitName(item);
-            if (!odcGroups[unitName]) odcGroups[unitName] = [];
-            odcGroups[unitName].push(item);
-        });
-
-        // Urutkan nama ODC secara alfabetis
-        const sortedNames = Object.keys(odcGroups).sort((a, b) => a.localeCompare(b));
-        sortedNames.forEach(name => {
-            tbody.appendChild(buildOdcGroupedRow(name, odcGroups[name], canEdit));
-        });
-
-        updateStats();
-        return;
+    if (isOdcCategory && !isSearchMode) {
+        // Render Matriks Kelengkapan Perangkat ODC di panel atas tabel
+        renderOdcMatrixSection(data, canEdit);
+    } else if (odcSectionEl) {
+        odcSectionEl.classList.add('hidden');
     }
 
     // ===== MODE KHUSUS: Folder TIANG → Tampilkan tabel format khusus Tiang =====

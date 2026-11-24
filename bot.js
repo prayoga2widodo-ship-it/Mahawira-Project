@@ -1259,6 +1259,12 @@ async function saveEvidentToDatabase(ctx, recordData) {
     if (recordData.category) {
         await ensureCategoryExists(recordData.category);
     }
+    if (recordData.baseLabel && recordData.baseLabel.toUpperCase().startsWith('ODC')) {
+        await ensureCategoryExists(recordData.baseLabel);
+    }
+    if (recordData.odcReference && recordData.odcReference.toUpperCase().startsWith('ODC')) {
+        await ensureCategoryExists(recordData.odcReference);
+    }
 
     // Rekam hash ke file persistent anti-duplikat
     if (recordData.sha256 || recordData.dhash) {
