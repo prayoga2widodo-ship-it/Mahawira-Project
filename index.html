@@ -270,23 +270,14 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div class="flex items-center gap-2">
                     <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                        <i class="fa-solid fa-folder text-blue-600"></i> Folder Perangkat ODC & Kategori Evident
+                        <i class="fa-solid fa-folder text-blue-600"></i> Folder Perangkat Utama
                     </h3>
                     <span class="text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full"
-                        id="folderCountBadge">0 Folder</span>
+                        id="folderCountBadge">4 Folder Utama</span>
                 </div>
-                <!-- Search & Filter Cepat untuk Kategori Tertentu -->
-                <div class="relative w-full sm:w-72">
-                    <i class="fa-solid fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                    <input type="text" id="categoryFolderSearch" oninput="filterFolderGrid()"
-                        placeholder="Cari kategori / ODC... (mis: SKD 01, TIANG)"
-                        class="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
-                    <button id="clearCatSearchBtn" onclick="clearCatFolderSearch()"
-                        class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
-                        title="Hapus filter kategori">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
+                <!-- Search bar disembunyikan karena folder sudah tetap: ODC, ODP, TIANG, MODEM -->
+                <input type="hidden" id="categoryFolderSearch">
+                <input type="hidden" id="clearCatSearchBtn">
             </div>
             <div id="folderGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5"></div>
         </section>
@@ -768,13 +759,10 @@
                         class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <div class="flex gap-2">
-                <input type="text" id="newCategoryInput" placeholder="Nama kategori baru..."
-                    class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 focus:outline-none">
-                <button onclick="addNewCategory()"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition">
-                    <i class="fa-solid fa-plus"></i> Tambah
-                </button>
+            <!-- Form tambah kategori dinonaktifkan: folder sudah tetap 4 saja -->
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 flex items-start gap-2">
+                <i class="fa-solid fa-circle-info mt-0.5 text-blue-500"></i>
+                <span>Folder perangkat sudah ditetapkan: <strong>ODC, ODP, TIANG, MODEM</strong>. Tidak dapat menambah atau menghapus folder.</span>
             </div>
 
             <div class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pt-2" id="categoryManageList"></div>

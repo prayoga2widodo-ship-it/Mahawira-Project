@@ -839,13 +839,16 @@ async function checkTiangProximity(lat, lng) {
     }
 }
 
-// Helper: Memastikan nama kategori ODC terdaftar di tabel categories Supabase
+// Helper: Memastikan kategori terdaftar (hanya 4 kategori sistem: ODC, ODP, TIANG, MODEM)
 async function ensureCategoryExists(categoryName) {
     if (!categoryName) return;
+    const catUpper = categoryName.trim().toUpperCase();
+    const allowed = ['ODC', 'ODP', 'TIANG', 'MODEM'];
+    if (!allowed.includes(catUpper)) return; // Jangan izinkan kategori selain 4 kategori sistem!
     try {
         await supabase
             .from('categories')
-            .upsert({ name: categoryName.trim() }, { onConflict: 'name' });
+            .upsert({ name: catUpper }, { onConflict: 'name' });
     } catch (e) {
         console.warn("Notice kategori:", e.message);
     }
@@ -1255,15 +1258,9 @@ async function saveEvidentToDatabase(ctx, recordData) {
         return false;
     }
 
-    // Pastikan kategori (misal: ODC-SKD 01) terdaftar di tabel categories dashboard
+    // Pastikan kategori adalah salah satu dari 4 kategori sistem: ODC, ODP, TIANG, MODEM
     if (recordData.category) {
         await ensureCategoryExists(recordData.category);
-    }
-    if (recordData.baseLabel && recordData.baseLabel.toUpperCase().startsWith('ODC')) {
-        await ensureCategoryExists(recordData.baseLabel);
-    }
-    if (recordData.odcReference && recordData.odcReference.toUpperCase().startsWith('ODC')) {
-        await ensureCategoryExists(recordData.odcReference);
     }
 
     // Rekam hash ke file persistent anti-duplikat
@@ -3763,7 +3760,7 @@ bot.on(['photo', 'document'], async (ctx) => {
         await saveEvidentToDatabase(ctx, {
             name: `evident_${baseLabel.replace(/[\s\/]+/g, '_')}_[${photoType.replace(/\s+/g, '_')}]_[H:${sha256Hash.substring(0, 16)}][DH:${dHash || 'none'}]_${Date.now()}.jpg`,
             size: fileSize,
-            category: parentOdc,
+            category: 'ODP',
             deviceLabel: fullDeviceLabel,
             baseLabel: baseLabel,
             photoType: photoType,
@@ -3936,7 +3933,7 @@ bot.on(['photo', 'document'], async (ctx) => {
             await saveEvidentToDatabase(ctx, {
                 name: modemFileName,
                 size: fileSize,
-                category: odcCat,              // ← Masuk ke folder ODC di dashboard!
+                category: 'MODEM',
                 deviceLabel: modemLabel,
                 photoType: 'TAMPAK DEPAN',
                 customerId: cId,
@@ -3984,7 +3981,7 @@ bot.on(['photo', 'document'], async (ctx) => {
             await saveEvidentToDatabase(ctx, {
                 name: modemFileName,
                 size: fileSize,
-                category: odcCat,              // ← Masuk ke folder ODC di dashboard!
+                category: 'MODEM',
                 deviceLabel: modemLabel,
                 photoType: 'TAMPAK BELAKANG',
                 customerId: cId,

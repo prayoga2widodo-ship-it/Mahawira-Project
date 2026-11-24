@@ -1122,7 +1122,7 @@ function isItemMatchingCategory(item, targetCat) {
 
     const tNorm = targetCat.trim().toUpperCase();
 
-    // 1. Khusus kategori MASTER ODC: Satukan seluruh berkas ODC ke dalam folder ODC
+    // 1. Khusus kategori ODC: Satukan seluruh berkas ODC ke dalam folder ODC
     if (tNorm === 'ODC') {
         const dLabel = (item.deviceLabel || '').trim().toUpperCase();
         const fName = (item.name || '').trim().toUpperCase();
@@ -1147,30 +1147,33 @@ function isItemMatchingCategory(item, targetCat) {
         return false;
     }
 
-    // 2. Khusus unit ODC tertentu (misal: ODC-RWT 99, ODC-SKD 01, ODC-CHSN 01)
-    if (tNorm.startsWith('ODC-')) {
+    // 2. Khusus kategori ODP: Satukan seluruh berkas ODP ke dalam folder ODP
+    if (tNorm === 'ODP') {
         const dLabel = (item.deviceLabel || '').trim().toUpperCase();
-        const fName = (item.name || '').trim().toUpperCase();
         const itemCat = (item.category || '').trim().toUpperCase();
-        const refOdc = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
-        const grpOdc = (getItemOdcGroup(item) || '').trim().toUpperCase();
-        const unitName = (getOdcUnitName(item) || '').trim().toUpperCase();
-        const tClean = tNorm.replace(/[\s_-]+/g, '');
-
-        // Jangan masukkan tiang
+        const fName = (item.name || '').trim().toUpperCase();
         const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
         if (isTiang) return false;
 
-        if (itemCat === tNorm || (itemCat && itemCat.replace(/[\s_-]+/g, '') === tClean)) return true;
-        if (refOdc === tNorm || (refOdc && refOdc.replace(/[\s_-]+/g, '') === tClean)) return true;
-        if (grpOdc === tNorm || (grpOdc && grpOdc.replace(/[\s_-]+/g, '') === tClean)) return true;
-        if (unitName === tNorm || (unitName && unitName.replace(/[\s_-]+/g, '') === tClean)) return true;
-        if (dLabel.startsWith(tNorm) || dLabel.replace(/[\s_-]+/g, '').startsWith(tClean)) return true;
-        if (fName.includes(tClean)) return true;
+        const isModem = dLabel.includes('MODEM') || Boolean(item.customerId || item.modemSn);
+        if (!isModem && (itemCat === 'ODP' || dLabel.startsWith('ODP') || fName.includes('ODP') || Boolean(item.odpName) || Boolean(item.odpReference))) {
+            return true;
+        }
         return false;
     }
 
-    // 3. Khusus kategori MODEM
+    // 3. Khusus kategori TIANG: Satukan seluruh berkas TIANG ke dalam folder TIANG
+    if (tNorm === 'TIANG') {
+        const itemCat = (item.category || '').trim().toUpperCase();
+        const dLabel = (item.deviceLabel || '').trim().toUpperCase();
+        const fName = (item.name || '').trim().toUpperCase();
+        if (itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG')) {
+            return true;
+        }
+        return false;
+    }
+
+    // 4. Khusus kategori MODEM: Satukan seluruh berkas MODEM ke dalam folder MODEM
     if (tNorm === 'MODEM') {
         if ((item.deviceLabel && item.deviceLabel.toUpperCase().includes('MODEM')) ||
             (item.name && item.name.toUpperCase().includes('MODEM')) ||
@@ -1182,100 +1185,14 @@ function isItemMatchingCategory(item, targetCat) {
         return false;
     }
 
-    // 4. Khusus kategori ODP
-    if (tNorm === 'ODP') {
-        const dLabel = (item.deviceLabel || '').trim().toUpperCase();
-        const itemCat = (item.category || '').trim().toUpperCase();
-        const fName = (item.name || '').trim().toUpperCase();
-        const isTiang = itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG');
-        if (isTiang) return false;
-
-        const isModem = dLabel.includes('MODEM') || Boolean(item.customerId || item.modemSn);
-        if (!isModem && (itemCat === 'ODP' || dLabel.startsWith('ODP') || Boolean(item.odpName))) {
-            return true;
-        }
-        return false;
-    }
-
-    // 5. Khusus kategori TIANG
-    if (tNorm === 'TIANG') {
-        const itemCat = (item.category || '').trim().toUpperCase();
-        const dLabel = (item.deviceLabel || '').trim().toUpperCase();
-        const fName = (item.name || '').trim().toUpperCase();
-        if (itemCat === 'TIANG' || dLabel.startsWith('TIANG') || dLabel.startsWith('T.') || fName.includes('TIANG')) {
-            return true;
-        }
-        return false;
-    }
-
-    // 6. Pencocokan langsung untuk kategori kustom lainnya
-    const tClean = tNorm.replace(/[\s_-]+/g, '');
+    // Fallback: pencocokan langsung
     const itemCat = (item.category || '').trim().toUpperCase();
-    if (itemCat === tNorm || (itemCat && itemCat.replace(/[\s_-]+/g, '') === tClean)) return true;
-
-    const itemRef = (item.odcReference || item.odc_reference || '').trim().toUpperCase();
-    if (itemRef === tNorm || (itemRef && itemRef.replace(/[\s_-]+/g, '') === tClean)) return true;
-
-    return false;
+    return itemCat === tNorm;
 }
 
-// Kumpulkan seluruh kategori: ODC master, TIANG, ODP, MODEM, serta unit ODC individu
+// Hanya 4 folder sistem: ODC, ODP, TIANG, MODEM — tidak ada sub-folder kustom
 function extractAllCategories() {
-    const catMap = new Map();
-
-    // 4 folder sistem standar selalu tersedia
-    catMap.set('ODC', 'ODC');
-    catMap.set('TIANG', 'TIANG');
-    catMap.set('ODP', 'ODP');
-    catMap.set('MODEM', 'MODEM');
-
-    // 1. Dari tabel categories Supabase
-    (categories || []).forEach(c => {
-        if (!c || typeof c !== 'string') return;
-        const trimmed = c.trim();
-        if (!trimmed) return;
-        const upper = trimmed.toUpperCase();
-        if (!catMap.has(upper)) {
-            catMap.set(upper, trimmed);
-        }
-    });
-
-    // 2. Dari berkas evident yang ada (sampleData)
-    (sampleData || []).forEach(item => {
-        if (!item) return;
-        
-        // Kategori langsung
-        if (item.category && typeof item.category === 'string') {
-            const cat = item.category.trim();
-            if (cat && !catMap.has(cat.toUpperCase())) {
-                catMap.set(cat.toUpperCase(), cat);
-            }
-        }
-
-        // Unit ODC spesifik (contoh: ODC-RWT 99, ODC-SKD 01)
-        const unitOdc = getOdcUnitName(item);
-        if (unitOdc && unitOdc.startsWith('ODC-') && !catMap.has(unitOdc.toUpperCase())) {
-            catMap.set(unitOdc.toUpperCase(), unitOdc);
-        }
-    });
-
-    const standardOrder = ['ODC', 'TIANG', 'ODP', 'MODEM'];
-
-    // Urutkan kategori: ODC, TIANG, ODP, MODEM pertama, lalu ODC unit (ODC-xxx), kemudian kategori kustom alfabetis
-    return Array.from(catMap.values()).sort((a, b) => {
-        const orderA = standardOrder.indexOf(a.toUpperCase());
-        const orderB = standardOrder.indexOf(b.toUpperCase());
-        if (orderA !== -1 && orderB !== -1) return orderA - orderB;
-        if (orderA !== -1) return -1;
-        if (orderB !== -1) return 1;
-
-        const isOdcA = a.toUpperCase().startsWith('ODC-');
-        const isOdcB = b.toUpperCase().startsWith('ODC-');
-        if (isOdcA && !isOdcB) return -1;
-        if (!isOdcA && isOdcB) return 1;
-
-        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-    });
+    return ['ODC', 'ODP', 'TIANG', 'MODEM'];
 }
 
 function renderCategoryUI() {
@@ -1299,7 +1216,7 @@ function renderCategoryUI() {
         const isSelected = currentCategory === cat;
         const catUpper = cat.toUpperCase();
         const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
-        const icon = catUpper === 'ODC' ? 'fa-folder' : (catUpper === 'TIANG' ? 'fa-tower-broadcast' : (catUpper === 'MODEM' ? 'fa-house-signal' : 'fa-wifi'));
+        const icon = catUpper === 'ODC' ? 'fa-folder' : (catUpper === 'ODP' ? 'fa-network-wired' : (catUpper === 'TIANG' ? 'fa-tower-broadcast' : 'fa-house-signal'));
 
         buttonsHtml += `
             <button onclick="setCategoryFilter('${escapeHtml(cat)}')" class="cat-btn ${isSelected ? 'bg-blue-600 text-white font-semibold shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} px-2.5 py-1 rounded-lg text-[11px] font-medium transition flex items-center gap-1">
@@ -1341,35 +1258,17 @@ function renderCategoryManageList() {
 
     manageList.innerHTML = allCats.map(cat => {
         const catUpper = cat.toUpperCase();
-        const isSystemCat = ['ODC', 'TIANG', 'ODP', 'MODEM'].includes(catUpper);
+        const isSystemCat = ['ODC', 'ODP', 'TIANG', 'MODEM'].includes(catUpper);
         const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
 
         return `
             <div class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-lg transition">
                 <span class="text-xs font-semibold text-slate-700 flex items-center gap-1.5 min-w-0">
-                    <i class="fa-solid ${catUpper === 'ODC' ? 'fa-folder text-blue-500' : (catUpper === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : (catUpper === 'MODEM' ? 'fa-house-signal text-cyan-500' : 'fa-wifi text-emerald-500'))} text-xs shrink-0"></i>
+                    <i class="fa-solid ${catUpper === 'ODC' ? 'fa-folder text-blue-500' : (catUpper === 'ODP' ? 'fa-network-wired text-emerald-500' : (catUpper === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : 'fa-house-signal text-cyan-500'))} text-xs shrink-0"></i>
                     <span class="truncate">${escapeHtml(cat)}</span>
                     <span class="text-[10px] text-slate-400 font-normal">(${count} berkas)</span>
                     ${isSystemCat ? '<span class="px-1.5 py-0.2 bg-blue-50 text-blue-600 rounded text-[9px] font-bold border border-blue-200">Sistem</span>' : ''}
                 </span>
-                <div class="flex items-center gap-1.5 shrink-0 ml-2">
-                    ${!isSystemCat && canEdit ? `
-                    <button type="button" onclick="editCategoryByName('${escapeHtml(cat)}')" 
-                        class="px-2 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-slate-600 hover:text-blue-600 transition flex items-center gap-1 text-[11px] shadow-2xs" 
-                        title="Edit Nama Kategori: ${escapeHtml(cat)}">
-                        <i class="fa-solid fa-pen text-[10px] text-blue-500"></i>
-                        <span>Edit</span>
-                    </button>
-                    ` : ''}
-                    ${!isSystemCat && isOwner ? `
-                    <button type="button" onclick="deleteCategoryByName('${escapeHtml(cat)}')" 
-                        class="px-2 py-1 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded text-rose-600 hover:text-rose-700 transition flex items-center gap-1 text-[11px] shadow-2xs" 
-                        title="Hapus Kategori (Owner): ${escapeHtml(cat)}">
-                        <i class="fa-solid fa-trash text-[10px]"></i>
-                        <span>Hapus</span>
-                    </button>
-                    ` : ''}
-                </div>
             </div>
         `;
     }).join('');
@@ -1387,59 +1286,41 @@ function renderFolderGrid() {
         : allCats;
 
     if (badge) {
-        badge.innerText = categorySearchQuery
-            ? `${visibleCats.length} dari ${allCats.length} Folder`
-            : `${allCats.length} Folder Kategori`;
+        badge.innerText = `${allCats.length} Folder Kategori`;
     }
 
     if (visibleCats.length === 0) {
         grid.innerHTML = `
             <div class="col-span-full py-4 text-center text-xs text-slate-400">
                 <i class="fa-solid fa-folder-xmark text-lg text-slate-300 mb-1 block"></i>
-                Tidak ada folder kategori yang sesuai dengan "<b>${escapeHtml(categorySearchQuery)}</b>"
+                Tidak ada folder kategori
             </div>
         `;
         return;
     }
 
-    const isOwner = checkIsOwner();
-    const canEdit = isOwner || currentUserRole === 'editor';
-
+    // Folder tetap: hanya 4 sistem, tidak ada tombol edit/hapus
     grid.innerHTML = visibleCats.map(cat => {
         const isSelected = currentCategory === cat;
         const catUpper = cat.toUpperCase();
-        const isSystemCat = ['ODC', 'TIANG', 'ODP', 'MODEM'].includes(catUpper);
         const count = sampleData.filter(item => isItemMatchingCategory(item, cat)).length;
         const iconClass = catUpper === 'ODC' 
             ? 'fa-folder-closed text-blue-500' 
-            : (catUpper === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : (catUpper === 'MODEM' ? 'fa-house-signal text-cyan-500' : 'fa-wifi text-emerald-500'));
+            : (catUpper === 'ODP' ? 'fa-network-wired text-emerald-500' : (catUpper === 'TIANG' ? 'fa-tower-broadcast text-amber-500' : 'fa-house-signal text-cyan-500'));
+        const colorClass = catUpper === 'ODC'
+            ? 'bg-blue-50 text-blue-700'
+            : (catUpper === 'ODP' ? 'bg-emerald-50 text-emerald-700' : (catUpper === 'TIANG' ? 'bg-amber-50 text-amber-700' : 'bg-cyan-50 text-cyan-700'));
 
         return `
             <div onclick="setCategoryFilter('${isSelected ? 'all' : escapeHtml(cat)}')" 
-                class="group relative cursor-pointer p-2.5 rounded-xl border transition flex items-center gap-2 select-none ${isSelected ? 'bg-blue-50/90 border-blue-400 shadow-sm ring-2 ring-blue-500/20' : 'bg-white hover:bg-slate-50 border-slate-200/80 hover:border-slate-300 shadow-xs'}">
-                <div class="w-7 h-7 rounded-lg ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100'} flex items-center justify-center text-xs shadow-xs shrink-0">
+                class="cursor-pointer p-2.5 rounded-xl border transition flex items-center gap-2 select-none ${isSelected ? 'bg-blue-50/90 border-blue-400 shadow-sm ring-2 ring-blue-500/20' : 'bg-white hover:bg-slate-50 border-slate-200/80 hover:border-slate-300 shadow-xs'}">
+                <div class="w-7 h-7 rounded-lg ${isSelected ? 'bg-blue-600 text-white' : colorClass} flex items-center justify-center text-xs shadow-xs shrink-0">
                     <i class="fa-solid ${isSelected ? 'fa-folder-open' : iconClass}"></i>
                 </div>
                 <div class="min-w-0 flex-1">
                     <h4 class="text-[11px] font-bold text-slate-800 truncate" title="${escapeHtml(cat)}">${escapeHtml(cat)}</h4>
                     <p class="text-[9.5px] text-slate-400 font-medium">${count} berkas</p>
                 </div>
-                ${!isSystemCat && canEdit ? `
-                <div class="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition shrink-0 ml-1">
-                    <button type="button" onclick="event.stopPropagation(); editCategoryByName('${escapeHtml(cat)}');" 
-                        class="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-md transition shadow-2xs" 
-                        title="Edit Nama Kategori: ${escapeHtml(cat)}">
-                        <i class="fa-solid fa-pen text-[9.5px]"></i>
-                    </button>
-                    ${isOwner ? `
-                    <button type="button" onclick="event.stopPropagation(); deleteCategoryByName('${escapeHtml(cat)}');" 
-                        class="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 rounded-md transition shadow-2xs" 
-                        title="Hapus Kategori (Owner): ${escapeHtml(cat)}">
-                        <i class="fa-solid fa-trash text-[9.5px]"></i>
-                    </button>
-                    ` : ''}
-                </div>
-                ` : ''}
             </div>
         `;
     }).join('');
