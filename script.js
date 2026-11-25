@@ -2033,7 +2033,7 @@ function buildOdpGroupedRow(odpName, items, canEdit) {
     const matchType = (item, ...types) => {
         const itemCat = (item.category || '').toUpperCase();
         const dname = norm(item.deviceLabel);
-        if (itemCat === 'ODP' || dname.startsWith('ODP')) return false;
+        if (itemCat === 'ODC' || dname.startsWith('ODC')) return false;
 
         const ptype = norm(item.photoType);
         const fname = norm(item.name);
