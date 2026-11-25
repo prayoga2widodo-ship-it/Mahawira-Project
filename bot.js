@@ -1202,11 +1202,24 @@ async function saveEvidentToDatabase(ctx, recordData) {
         }
     }
 
-    // 2. Upload file buffer ke Supabase Cloud Storage
+    // 2. Upload file buffer ke Supabase Cloud Storage (Wajib Permanen)
     if (recordData.fileBuffer) {
         const uploadedUrl = await uploadToSupabaseStorage(recordData.name, recordData.fileBuffer, recordData.mimeType || 'image/jpeg');
         if (uploadedUrl) {
             finalFileUrl = uploadedUrl;
+        } else {
+            // JIKA UPLOAD GAGAL, COBA RETRY SEKALI LAGI DENGAN NAMA DARURAT
+            console.warn("⚠️ Upload Storage pertama gagal, mencoba upload darurat...");
+            const emergencyName = `evident_${Date.now()}_emergency.jpg`;
+            const retryUrl = await uploadToSupabaseStorage(emergencyName, recordData.fileBuffer, 'image/jpeg');
+            if (retryUrl) {
+                finalFileUrl = retryUrl;
+            } else {
+                console.error("❌ FATAL: Upload ke Supabase Storage gagal setelah retry!");
+                if (ctx && ctx.reply) {
+                    ctx.reply("⚠️ *PERINGATAN SISTEM:* Penyimpanan Cloud Storage sedang mengalami kendala. Harap laporkan ke Admin.").catch(() => {});
+                }
+            }
         }
     }
 
