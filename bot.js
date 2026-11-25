@@ -902,7 +902,8 @@ function downloadFileBuffer(url) {
 // Helper: Upload file buffer ke Supabase Storage (dengan fallback ke URL Telegram)
 async function uploadToSupabaseStorage(fileName, fileBuffer, mimeType = 'image/jpeg') {
     try {
-        const filePath = `uploads/${Date.now()}_${fileName}`;
+        const safeName = (fileName || `evident_${Date.now()}.jpg`).replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const filePath = `uploads/${Date.now()}_${safeName}`;
         const { data, error } = await supabase.storage
             .from('evidents')
             .upload(filePath, fileBuffer, {
@@ -910,11 +911,17 @@ async function uploadToSupabaseStorage(fileName, fileBuffer, mimeType = 'image/j
                 upsert: true
             });
 
-        if (!error && data) {
+        if (error) {
+            console.error("Storage upload error:", error);
+            return null;
+        }
+
+        if (data) {
             const { data: publicData } = supabase.storage
                 .from('evidents')
                 .getPublicUrl(filePath);
             if (publicData && publicData.publicUrl) {
+                console.log(`✅ File successfully uploaded to Supabase Storage: ${filePath}`);
                 return publicData.publicUrl;
             }
         }
