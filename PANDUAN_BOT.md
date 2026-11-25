@@ -33,7 +33,7 @@ Semua proses penginputan data perangkat di bot sekarang menerapkan **SISTEM WAJI
 ### 🪵 Alur Wajib 3 Step TIANG:
 1. **Step 1 - Label Tiang:** Kirim nama/label tiang (misal `TIANG-SKD-01`).
 2. **Step 2 - Foto Evident Tiang:** Kirim foto fisik tiang asli tegak di lapangan (termasuk deteksi buram & anti duplikasi).
-3. **Step 3 - Share Loc GPS Tiang:** Tekan tombol `[📍 Kirim Lokasi Tiang Sekarang]` (Wajib radius minimal > 30 meter dari tiang lain). *(Selesai & tersimpan ke Supabase).*
+3. **Step 3 - Share Loc GPS Tiang:** Tekan tombol `[📍 Kirim Lokasi Tiang Sekarang]` (Wajib radius minimal > 10 meter dari tiang lain). *(Selesai & tersimpan ke Supabase).*
 
 ---
 

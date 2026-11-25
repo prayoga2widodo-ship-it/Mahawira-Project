@@ -774,7 +774,7 @@ async function syncHashesFromSupabase() {
 }
 
 // ==========================================================
-// 4. VALIDASI GEOLOKASI GPS TIANG (RADIUS MAKSIMAL 30 METER)
+// 4. VALIDASI GEOLOKASI GPS TIANG (RADIUS MAKSIMAL 10 METER)
 // ==========================================================
 
 // Menghitung Jarak Antara 2 Titik Koordinat GPS Menggunakan Formula Haversine (Satuan: Meter)
@@ -794,7 +794,7 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Memeriksa Radius Jarak Tiang Baru Terhadap Tiang-Tiang yang Sudah Terdaftar (Radius Max 30m)
+// Memeriksa Radius Jarak Tiang Baru Terhadap Tiang-Tiang yang Sudah Terdaftar (Radius Max 10m)
 async function checkTiangProximity(lat, lng) {
     try {
         const { data, error } = await supabase
@@ -819,9 +819,9 @@ async function checkTiangProximity(lat, lng) {
             }
         }
 
-        // SOP: Titik koordinat tiang baru wajib berada di luar radius 30 meter dari tiang yang sudah ada!
-        // Jika jarak <= 30 meter, tolak karena berada di radius tiang yang sama!
-        if (minDistance <= 30.0 && closest) {
+        // SOP: Titik koordinat tiang baru wajib berada di luar radius 10 meter dari tiang yang sudah ada!
+        // Jika jarak <= 10 meter, tolak karena berada di radius tiang yang sama!
+        if (minDistance <= 10.0 && closest) {
             return {
                 allowed: false,
                 distance: minDistance,
@@ -1553,7 +1553,7 @@ async function startTiangFlow(ctx) {
     await ctx.reply(
         `🪵 *INPUT DATA EVIDENT TIANG*\n\n` +
         `SOP PT MAHAWIRA NUSANTARA GRUP:\n` +
-        `Setiap evident tiang wajib memiliki **Label Tiang**, **Foto Evident**, dan **Share Loc GPS** (berjarak > 30 meter antar tiang).\n\n` +
+        `Setiap evident tiang wajib memiliki **Label Tiang**, **Foto Evident**, dan **Share Loc GPS** (berjarak > 10 meter antar tiang).\n\n` +
         `👉 *Langkah 1: Silakan ketikkan LABEL / NOMOR TIANG Anda sekarang:*\n` +
         `📌 *Format/Contoh:* \`TIANG-01\`, \`TIANG-SKD 01\`, \`TIANG-001\`, atau \`T.01\`\n\n` +
         `⚠️ _Aksi foto dan shareloc akan dibuka setelah Label Tiang diinput._\n` +
@@ -2150,7 +2150,7 @@ bot.command(['done', 'selesai'], async (ctx) => {
         if (!session.deviceLabel || !session.locationUrl) {
             return ctx.reply(
                 `🚫 *EVIDENT TIANG BELUM LENGKAP!*\n\n` +
-                `Sesuai SOP, tiang wajib memiliki Label, Foto Evident, dan Share Loc GPS (radius > 30 meter).\n\n` +
+                `Sesuai SOP, tiang wajib memiliki Label, Foto Evident, dan Share Loc GPS (radius > 10 meter).\n\n` +
                 `👉 *Silakan selesaikan step yang masih kurang!*`
             );
         }
@@ -3411,7 +3411,7 @@ bot.on('location', async (ctx) => {
 
     await ctx.reply(`📍 *Titik Lokasi GPS Tiang Diterima:* \`${lat}, ${lng}\`\n⏳ *Sedang memeriksa radius jarak tiang...*`, { parse_mode: 'Markdown' });
 
-    // Validasi Radius Max 30 Meter Antar Tiang (SOP Anti Tagging Kembar)
+    // Validasi Radius Max 10 Meter Antar Tiang (SOP Anti Tagging Kembar)
     const proximity = await checkTiangProximity(lat, lng);
     if (!proximity.allowed) {
         const tiang = proximity.existingTiang;
@@ -3422,15 +3422,15 @@ bot.on('location', async (ctx) => {
             `🚫 *LOKASI TIANG DITOLAK: TITIK KOORDINAT TERLALU DEKAT / DALAM RADIUS TIANG LAIN!*\n\n` +
             `⚠️ *Hasil Pengecekan GPS Sistem:*\n` +
             `Titik koordinat yang Anda kirimkan berada dalam **radius ${distStr}** dari tiang yang sudah terdaftar sebelumnya.\n` +
-            `*(SOP: Batas minimal jarak antar tiang wajib > 30 meter)*\n\n` +
+            `*(SOP: Batas minimal jarak antar tiang wajib > 10 meter)*\n\n` +
             `📍 *Tiang Terdekat Yang Terdeteksi:*\n` +
             `• 🏷 *Label Tiang:* \`${tiang.device_label || tiang.name}\`\n` +
             `• 📍 *Koordinat Tiang:* \`${tiang.latitude}, ${tiang.longitude}\`\n` +
-            `• 📏 *Jarak:* *${distStr}* (Ditolak karena $\\le$ 30 meter)\n` +
+            `• 📏 *Jarak:* *${distStr}* (Ditolak karena $\\le$ 10 meter)\n` +
             `• 👤 *Pengunggah:* \`${tiang.uploader}\`\n` +
             `• 📅 *Waktu Upload:* ${tiang.date}\n\n` +
             `📏 *SOP PT MAHAWIRA NUSANTARA GRUP:*\n` +
-            `Setiap tiang wajib berada di lokasi berbeda. Dilarang menandai titik koordinat tiang (titik A dan titik B) yang berada di radius $\\le$ 30 meter.\n\n` +
+            `Setiap tiang wajib berada di lokasi berbeda. Dilarang menandai titik koordinat tiang (titik A dan titik B) yang berada di radius $\\le$ 10 meter.\n\n` +
             `👉 *Silakan geser/ambil ulang titik koordinat GPS tiang yang benar di lokasi tiang baru!*`,
             {
                 parse_mode: 'Markdown',
@@ -3832,8 +3832,8 @@ bot.on(['photo', 'document'], async (ctx) => {
             `🏷 *Label Tiang:* \`${session.deviceLabel}\`\n` +
             `✅ Foto tiang lolos pemeriksaan script (Jelas & Asli/Bukan Duplikat)!\n\n` +
             `⚠️ *Aturan SOP Tagging GPS Tiang:*\n` +
-            `• Koordinat tiang wajib berjarak **LEBIH DARI 30 METER** dari tiang yang sudah terdaftar.\n` +
-            `• Jika titik koordinat berada di dalam radius ≤ 30 meter dari tiang lain, sistem akan otomatis menolak.\n\n` +
+            `• Koordinat tiang wajib berjarak **LEBIH DARI 10 METER** dari tiang yang sudah terdaftar.\n` +
+            `• Jika titik koordinat berada di dalam radius ≤ 10 meter dari tiang lain, sistem akan otomatis menolak.\n\n` +
             `👉 *Sekarang silakan kirimkan Lokasi GPS Tiang:*\n` +
             `Tekan tombol **📍 Kirim Lokasi Tiang Sekarang** di papan bawah layar Anda:`,
             {
@@ -4129,7 +4129,7 @@ bot.launch().then(async () => {
     console.log("⚡ Format Validation & Edit Label: AKTIF");
     console.log("⚡ Validasi Kelurusan ODC -> ODP: AKTIF");
     console.log("⚡ Deteksi Otomatis Foto Duplicate: AKTIF (SHA-256 + Perceptual dHash)");
-    console.log("⚡ Validasi Radius GPS Tiang: AKTIF (Wajib > 30m, tolak radius <= 30m)");
+    console.log("⚡ Validasi Radius GPS Tiang: AKTIF (Wajib > 10m, tolak radius <= 10m)");
     console.log("=================================================");
     await syncHashesFromSupabase();
 }).catch((err) => {
