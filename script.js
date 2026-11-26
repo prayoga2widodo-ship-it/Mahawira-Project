@@ -3858,19 +3858,25 @@ function switchMainView(viewName) {
     currentMainView = viewName;
     const evidentView = document.getElementById('evidentView');
     const kmlView = document.getElementById('kmlView');
+    const materialView = document.getElementById('materialView');
     const tabEvident = document.getElementById('navTabEvident');
     const tabKml = document.getElementById('navTabKml');
+    const tabMaterial = document.getElementById('navTabMaterial');
+
+    // Hide all views first
+    if (evidentView) evidentView.classList.add('hidden');
+    if (kmlView) kmlView.classList.add('hidden');
+    if (materialView) materialView.classList.add('hidden');
+
+    // Reset all tab styles to inactive
+    const inactiveTab = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer";
+    if (tabEvident) tabEvident.className = inactiveTab;
+    if (tabKml) tabKml.className = inactiveTab;
+    if (tabMaterial) tabMaterial.className = inactiveTab;
 
     if (viewName === 'kml') {
-        if (evidentView) evidentView.classList.add('hidden');
         if (kmlView) kmlView.classList.remove('hidden');
-
-        if (tabEvident) {
-            tabEvident.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer";
-        }
-        if (tabKml) {
-            tabKml.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-600 text-white shadow-xs cursor-pointer";
-        }
+        if (tabKml) tabKml.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-600 text-white shadow-xs cursor-pointer";
 
         if (!kmlLeafletMap) {
             initKmlMap();
@@ -3879,19 +3885,18 @@ function switchMainView(viewName) {
                 if (kmlLeafletMap) kmlLeafletMap.invalidateSize();
             }, 150);
         }
-
         updateKmlStats();
         renderKmlPoints(activeKmlLayerFilter);
-    } else {
-        if (kmlView) kmlView.classList.add('hidden');
-        if (evidentView) evidentView.classList.remove('hidden');
 
-        if (tabEvident) {
-            tabEvident.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-blue-600 text-white shadow-xs cursor-pointer";
-        }
-        if (tabKml) {
-            tabKml.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer";
-        }
+    } else if (viewName === 'material') {
+        if (materialView) materialView.classList.remove('hidden');
+        if (tabMaterial) tabMaterial.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-amber-600 text-white shadow-xs cursor-pointer";
+        loadMaterialDashboard();
+
+    } else {
+        // Default: evident view
+        if (evidentView) evidentView.classList.remove('hidden');
+        if (tabEvident) tabEvident.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-blue-600 text-white shadow-xs cursor-pointer";
     }
 }
 
@@ -5242,3 +5247,217 @@ window.toggleUploadedKmlVisibility = toggleUploadedKmlVisibility;
 window.clearUploadedKml = clearUploadedKml;
 window.saveAllUploadedKmlPointsToDb = saveAllUploadedKmlPointsToDb;
 window.saveSingleKmlPointToDb = saveSingleKmlPointToDb;
+
+// =====================================================================
+// MODUL LOGISTIK & MATERIAL - DASHBOARD MANAJEMEN GUDANG
+// =====================================================================
+
+let materialTransactions = [];
+let materialInventory = [];
+let currentMaterialFilter = 'ALL';
+
+async function loadMaterialDashboard() {
+    try {
+        // Fetch transactions (terbaru dulu, max 300)
+        const { data: txData, error: txErr } = await supabaseClient
+            .from('material_transactions')
+            .select('*')
+            .order('id', { ascending: false })
+            .limit(300);
+
+        if (txErr) {
+            console.warn('Tabel material_transactions belum ada atau error:', txErr.message);
+            const tbody = document.getElementById('materialTxTableBody');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="10" class="text-center py-12 text-rose-400 font-semibold"><i class="fa-solid fa-circle-exclamation mr-2"></i>Tabel belum dibuat di Supabase. Jalankan schema.sql terlebih dahulu.</td></tr>`;
+            const grid = document.getElementById('materialInventoryGrid');
+            if (grid) grid.innerHTML = `<div class="col-span-full text-center py-8 text-rose-400 font-semibold">Tabel belum dibuat di Supabase.</div>`;
+            return;
+        }
+        materialTransactions = txData || [];
+
+        // Fetch inventory (urut abjad)
+        const { data: invData, error: invErr } = await supabaseClient
+            .from('materials_inventory')
+            .select('*')
+            .order('name', { ascending: true });
+
+        if (invErr) {
+            console.warn('Tabel materials_inventory belum ada atau error:', invErr.message);
+        }
+        materialInventory = invData || [];
+
+        renderMaterialStats();
+        renderMaterialTransactionTable(currentMaterialFilter);
+        renderMaterialInventoryGrid();
+
+    } catch (e) {
+        console.error('Error loading material dashboard:', e);
+    }
+}
+
+function renderMaterialStats() {
+    const totalNew = materialInventory.reduce((s, i) => s + (i.stock_new || 0), 0);
+    const totalRefurbish = materialInventory.reduce((s, i) => s + (i.stock_refurbish || 0), 0);
+    const totalDamaged = materialInventory.reduce((s, i) => s + (i.stock_damaged || 0), 0);
+    const pending = materialTransactions.filter(t => t.status === 'Pending').length;
+
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+    setEl('matStatNew', totalNew.toLocaleString('id-ID'));
+    setEl('matStatRefurbish', totalRefurbish.toLocaleString('id-ID'));
+    setEl('matStatDamaged', totalDamaged.toLocaleString('id-ID'));
+    setEl('matStatTx', materialTransactions.length.toLocaleString('id-ID'));
+    setEl('matStatPending', pending.toLocaleString('id-ID'));
+}
+
+function filterMaterialTx(type) {
+    currentMaterialFilter = type;
+    const filterMap = { ALL: 'All', OUT: 'Out', RETURN_UNUSED: 'Return', REFURBISH: 'Refurbish' };
+    ['ALL', 'OUT', 'RETURN_UNUSED', 'REFURBISH'].forEach(t => {
+        const btn = document.getElementById('matFilter' + filterMap[t]);
+        if (!btn) return;
+        btn.className = t === type
+            ? 'px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white transition'
+            : 'px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+    });
+    renderMaterialTransactionTable(type);
+}
+
+function renderMaterialTransactionTable(filter) {
+    const tbody = document.getElementById('materialTxTableBody');
+    if (!tbody) return;
+
+    const filtered = filter === 'ALL'
+        ? materialTransactions
+        : materialTransactions.filter(t => t.transaction_type === filter);
+
+    if (filtered.length === 0) {
+        const labels = { OUT: 'Ambil Material', RETURN_UNUSED: 'Return Sisa', REFURBISH: 'Refurbish' };
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-12 text-slate-400"><i class="fa-solid fa-box-open mr-2"></i>Belum ada transaksi ${filter === 'ALL' ? '' : (labels[filter] || filter)} yang tercatat.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(t => {
+        const typeConfig = {
+            'OUT': { icon: '📦', label: 'Ambil', color: 'bg-blue-100 text-blue-800' },
+            'RETURN_UNUSED': { icon: '🔄', label: 'Return Sisa', color: 'bg-emerald-100 text-emerald-800' },
+            'REFURBISH': { icon: '♻️', label: 'Refurbish', color: 'bg-amber-100 text-amber-800' }
+        }[t.transaction_type] || { icon: '📋', label: t.transaction_type, color: 'bg-slate-100 text-slate-800' };
+
+        const statusColor = t.status === 'Verified / Diterima'
+            ? 'bg-emerald-100 text-emerald-800'
+            : t.status === 'Rejected'
+                ? 'bg-rose-100 text-rose-800'
+                : 'bg-orange-100 text-orange-800';
+
+        const safeUrl = (t.file_url || '').replace(/'/g, "\\'");
+        const photoBtn = t.file_url
+            ? `<button onclick="previewMaterialPhoto('${safeUrl}')" class="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-semibold transition"><i class="fa-solid fa-eye text-[10px]"></i> Lihat</button>`
+            : `<span class="text-slate-300 text-[11px]">—</span>`;
+
+        const verifyBtn = (t.status === 'Pending' && checkIsOwner())
+            ? `<button onclick="verifyMaterialTransaction(${t.id})" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-semibold transition"><i class="fa-solid fa-check text-[10px]"></i> Terima</button>`
+            : '';
+
+        const dateFormatted = t.date
+            ? new Date(t.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+            : '-';
+
+        const snInfo = [
+            t.serial_number ? `<span class="font-mono bg-slate-100 px-1 rounded text-[10px]">${t.serial_number}</span>` : '',
+            t.item_condition ? `<span class="text-slate-500">${t.item_condition}</span>` : ''
+        ].filter(Boolean).join('<br>');
+
+        return `<tr class="hover:bg-slate-50 transition">
+            <td class="px-4 py-3 text-slate-700 whitespace-nowrap text-[11px]">${dateFormatted}</td>
+            <td class="px-4 py-3 font-semibold text-slate-900 max-w-[120px] truncate" title="${t.uploader || ''}">${t.uploader || '-'}</td>
+            <td class="px-4 py-3"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${typeConfig.color}">${typeConfig.icon} ${typeConfig.label}</span></td>
+            <td class="px-4 py-3 font-bold text-slate-900 max-w-[150px] truncate" title="${t.material_name || ''}">${t.material_name || '-'}</td>
+            <td class="px-4 py-3 font-mono font-bold text-slate-800 whitespace-nowrap">${t.quantity || 0} <span class="font-normal text-slate-500">${t.unit || 'pcs'}</span></td>
+            <td class="px-4 py-3 text-[11px] leading-relaxed">${snInfo || '-'}</td>
+            <td class="px-4 py-3 text-slate-600 max-w-[150px] truncate text-[11px]" title="${t.project_target || ''}">${t.project_target || '-'}</td>
+            <td class="px-4 py-3">${photoBtn}</td>
+            <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${statusColor}">${t.status || 'Pending'}</span></td>
+            <td class="px-4 py-3">${verifyBtn}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderMaterialInventoryGrid() {
+    const grid = document.getElementById('materialInventoryGrid');
+    if (!grid) return;
+
+    if (materialInventory.length === 0) {
+        grid.innerHTML = `<div class="col-span-full text-center py-8 text-slate-400"><i class="fa-solid fa-box-open mr-2"></i>Belum ada data inventaris barang.</div>`;
+        return;
+    }
+
+    grid.innerHTML = materialInventory.map(item => {
+        const isLow = (item.stock_new || 0) <= (item.min_stock_alert || 5);
+        const lowBadge = isLow
+            ? `<span class="ml-1 text-[9px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full border border-rose-300 animate-pulse">⚠️ MENIPIS</span>`
+            : '';
+        return `<div class="border ${isLow ? 'border-rose-300 bg-rose-50/50' : 'border-slate-200 bg-white'} rounded-xl p-3.5 space-y-2 hover:shadow-md transition">
+            <div class="flex items-start justify-between gap-2">
+                <div class="font-bold text-slate-900 text-xs leading-tight">${item.name}${lowBadge}</div>
+                <span class="shrink-0 text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full uppercase">${item.category || '-'}</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 mt-2">
+                <div class="text-center bg-emerald-50 rounded-lg p-1.5 border border-emerald-200">
+                    <p class="text-[9px] text-emerald-600 font-bold uppercase">Baru</p>
+                    <p class="text-base font-extrabold text-emerald-700">${item.stock_new || 0}</p>
+                    <p class="text-[9px] text-emerald-500">${item.unit || 'pcs'}</p>
+                </div>
+                <div class="text-center bg-amber-50 rounded-lg p-1.5 border border-amber-200">
+                    <p class="text-[9px] text-amber-600 font-bold uppercase">Refurb</p>
+                    <p class="text-base font-extrabold text-amber-700">${item.stock_refurbish || 0}</p>
+                    <p class="text-[9px] text-amber-500">${item.unit || 'pcs'}</p>
+                </div>
+                <div class="text-center bg-rose-50 rounded-lg p-1.5 border border-rose-200">
+                    <p class="text-[9px] text-rose-600 font-bold uppercase">Rusak</p>
+                    <p class="text-base font-extrabold text-rose-700">${item.stock_damaged || 0}</p>
+                    <p class="text-[9px] text-rose-500">${item.unit || 'pcs'}</p>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function previewMaterialPhoto(url) {
+    const container = document.getElementById('previewBody');
+    if (container) {
+        container.innerHTML = `<img src="${url}" alt="Foto Material" class="max-h-[70vh] w-auto object-contain rounded-lg shadow-lg" onerror="this.src='';this.alt='Foto tidak dapat dimuat'">`;
+    }
+    const dlBtn = document.getElementById('downloadFromPreviewBtn');
+    if (dlBtn) { dlBtn.href = url; dlBtn.download = 'foto_material.jpg'; }
+    const nameEl = document.getElementById('previewFileName');
+    if (nameEl) nameEl.innerText = 'Foto Evident Material';
+    const infoEl = document.getElementById('previewInfo');
+    if (infoEl) infoEl.innerText = 'Foto serah terima material (tersimpan permanen di Cloud Storage)';
+    openModal('previewModal');
+}
+
+async function verifyMaterialTransaction(id) {
+    if (!confirm('Konfirmasi: Barang telah diterima secara fisik di gudang?')) return;
+    const verifiedBy = (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.email || 'Admin') : 'Admin';
+    const { error } = await supabaseClient
+        .from('material_transactions')
+        .update({
+            status: 'Verified / Diterima',
+            verified_by: verifiedBy,
+            verified_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+    if (error) {
+        alert('Gagal memverifikasi: ' + error.message);
+        return;
+    }
+    alert('✅ Transaksi berhasil diverifikasi!');
+    await loadMaterialDashboard();
+}
+
+// Expose material functions to global scope
+window.loadMaterialDashboard = loadMaterialDashboard;
+window.filterMaterialTx = filterMaterialTx;
+window.previewMaterialPhoto = previewMaterialPhoto;
+window.verifyMaterialTransaction = verifyMaterialTransaction;

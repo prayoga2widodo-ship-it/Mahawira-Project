@@ -192,6 +192,13 @@
                         <span>Peta KML &amp; GIS Lapangan</span>
                         <span class="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider border border-emerald-300">Live</span>
                     </button>
+
+                    <button id="navTabMaterial" onclick="switchMainView('material')"
+                        class="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
+                        <i class="fa-solid fa-boxes-stacked text-amber-600 text-xs"></i>
+                        <span>Logistik &amp; Material</span>
+                        <span class="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider border border-amber-300">Gudang</span>
+                    </button>
                 </div>
 
                 <div class="flex items-center gap-2">
@@ -655,6 +662,94 @@
                 </div>
             </section>
         </div><!-- End of #kmlView -->
+
+        <!-- VIEW 3: LOGISTIK & MATERIAL -->
+        <div id="materialView" class="hidden space-y-5">
+
+          <!-- Stat Cards -->
+          <section class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div class="bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Stok Baru</p><p class="text-2xl font-extrabold text-slate-900 mt-1" id="matStatNew">-</p></div>
+              <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-box-open"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-4 border border-amber-200/80 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-semibold text-amber-500 uppercase tracking-wide">Refurbish</p><p class="text-2xl font-extrabold text-amber-700 mt-1" id="matStatRefurbish">-</p></div>
+              <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-4 border border-rose-200/80 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-semibold text-rose-400 uppercase tracking-wide">Rusak/Afkir</p><p class="text-2xl font-extrabold text-rose-700 mt-1" id="matStatDamaged">-</p></div>
+              <div class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-4 border border-blue-200/80 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-semibold text-blue-400 uppercase tracking-wide">Total Transaksi</p><p class="text-2xl font-extrabold text-blue-700 mt-1" id="matStatTx">-</p></div>
+              <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-right-left"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-4 border border-orange-200/80 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-semibold text-orange-400 uppercase tracking-wide">Pending Verifikasi</p><p class="text-2xl font-extrabold text-orange-700 mt-1" id="matStatPending">-</p></div>
+              <div class="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center"><i class="fa-solid fa-clock"></i></div>
+            </div>
+          </section>
+
+          <!-- Filter & Transaction Table -->
+          <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-md">
+                  <i class="fa-solid fa-boxes-stacked text-sm"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900">Log Transaksi Material</h3>
+                  <p class="text-xs text-slate-500">Real-time dari Bot Telegram Material</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <button onclick="filterMaterialTx('ALL')" id="matFilterAll" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white transition">Semua</button>
+                <button onclick="filterMaterialTx('OUT')" id="matFilterOut" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">📦 Ambil (Out)</button>
+                <button onclick="filterMaterialTx('RETURN_UNUSED')" id="matFilterReturn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">🔄 Return Sisa</button>
+                <button onclick="filterMaterialTx('REFURBISH')" id="matFilterRefurbish" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">♻️ Refurbish</button>
+                <button onclick="loadMaterialDashboard()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Tanggal</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Teknisi</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Jenis</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Material</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Qty</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">SN / Kondisi</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Keperluan</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Foto</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th class="text-left px-4 py-3 font-bold text-slate-500 uppercase tracking-wider">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="materialTxTableBody" class="divide-y divide-slate-100">
+                  <tr><td colspan="10" class="text-center py-12 text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Memuat data transaksi material...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Inventory Stock Cards Grid -->
+          <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                <i class="fa-solid fa-warehouse text-sm"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-900">Stok Gudang Material</h3>
+                <p class="text-xs text-slate-500">Update real-time dari setiap transaksi yang terverifikasi</p>
+              </div>
+            </div>
+            <div id="materialInventoryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div class="text-center py-8 text-slate-400 col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Memuat data inventaris...</div>
+            </div>
+          </section>
+
+        </div><!-- End of #materialView -->
     </main>
 
     <!-- Modal Share Access -->
@@ -1046,7 +1141,7 @@
 
     <!-- Application JavaScript Scripts (Cache-Busted to Ensure Instant Update) -->
     <script src="config.js?v=20261125_02"></script>
-    <script src="script.js?v=20261126_01"></script>
+    <script src="script.js?v=20261126_02"></script>
 </body>
 
 </html>
