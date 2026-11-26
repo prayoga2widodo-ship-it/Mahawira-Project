@@ -3854,6 +3854,34 @@ function extractCoordinates(item) {
 }
 
 // Navigasi Antara Menu Berkas Evident & Menu Peta KML & GIS
+function openNavDrawer() {
+    const drawer = document.getElementById('navDrawer');
+    const backdrop = document.getElementById('navDrawerBackdrop');
+    if (backdrop) backdrop.classList.remove('hidden');
+    if (drawer) drawer.classList.remove('-translate-x-full');
+}
+
+function closeNavDrawer() {
+    const drawer = document.getElementById('navDrawer');
+    const backdrop = document.getElementById('navDrawerBackdrop');
+    if (drawer) drawer.classList.add('-translate-x-full');
+    if (backdrop) backdrop.classList.add('hidden');
+}
+
+function toggleNavDrawer() {
+    const drawer = document.getElementById('navDrawer');
+    if (!drawer) return;
+    if (drawer.classList.contains('-translate-x-full')) {
+        openNavDrawer();
+    } else {
+        closeNavDrawer();
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeNavDrawer();
+});
+
 function switchMainView(viewName) {
     currentMainView = viewName;
     const evidentView = document.getElementById('evidentView');
@@ -3862,21 +3890,26 @@ function switchMainView(viewName) {
     const tabEvident = document.getElementById('navTabEvident');
     const tabKml = document.getElementById('navTabKml');
     const tabMaterial = document.getElementById('navTabMaterial');
+    const moduleBadge = document.getElementById('activeModuleBadge');
 
     // Hide all views first
     if (evidentView) evidentView.classList.add('hidden');
     if (kmlView) kmlView.classList.add('hidden');
     if (materialView) materialView.classList.add('hidden');
 
-    // Reset all tab styles to inactive
-    const inactiveTab = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer";
-    if (tabEvident) tabEvident.className = inactiveTab;
-    if (tabKml) tabKml.className = inactiveTab;
-    if (tabMaterial) tabMaterial.className = inactiveTab;
+    // Reset all drawer items to inactive
+    const inactiveDrawerBtn = "w-full text-left px-3.5 py-3 rounded-xl transition flex items-center gap-3 text-slate-700 hover:bg-slate-100 cursor-pointer";
+    if (tabEvident) tabEvident.className = inactiveDrawerBtn;
+    if (tabKml) tabKml.className = inactiveDrawerBtn;
+    if (tabMaterial) tabMaterial.className = inactiveDrawerBtn;
 
     if (viewName === 'kml') {
         if (kmlView) kmlView.classList.remove('hidden');
-        if (tabKml) tabKml.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-600 text-white shadow-xs cursor-pointer";
+        if (tabKml) tabKml.className = "w-full text-left px-3.5 py-3 rounded-xl transition flex items-center gap-3 bg-emerald-600 text-white shadow-sm cursor-pointer";
+        if (moduleBadge) {
+            moduleBadge.className = "inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold";
+            moduleBadge.innerHTML = `<i class="fa-solid fa-earth-asia text-emerald-600"></i><span>Peta KML &amp; GIS Lapangan</span>`;
+        }
 
         if (!kmlLeafletMap) {
             initKmlMap();
@@ -3890,14 +3923,24 @@ function switchMainView(viewName) {
 
     } else if (viewName === 'material') {
         if (materialView) materialView.classList.remove('hidden');
-        if (tabMaterial) tabMaterial.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-amber-600 text-white shadow-xs cursor-pointer";
+        if (tabMaterial) tabMaterial.className = "w-full text-left px-3.5 py-3 rounded-xl transition flex items-center gap-3 bg-amber-600 text-white shadow-sm cursor-pointer";
+        if (moduleBadge) {
+            moduleBadge.className = "inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold";
+            moduleBadge.innerHTML = `<i class="fa-solid fa-boxes-stacked text-amber-600"></i><span>Logistik &amp; Material</span>`;
+        }
         loadMaterialDashboard();
 
     } else {
         // Default: evident view
         if (evidentView) evidentView.classList.remove('hidden');
-        if (tabEvident) tabEvident.className = "px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-blue-600 text-white shadow-xs cursor-pointer";
+        if (tabEvident) tabEvident.className = "w-full text-left px-3.5 py-3 rounded-xl transition flex items-center gap-3 bg-blue-600 text-white shadow-sm cursor-pointer";
+        if (moduleBadge) {
+            moduleBadge.className = "inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold";
+            moduleBadge.innerHTML = `<i class="fa-solid fa-folder-closed text-blue-600"></i><span>Berkas Evident (ODC, ODP, Tiang)</span>`;
+        }
     }
+
+    closeNavDrawer();
 }
 
 // Inisialisasi Canvas Peta Leaflet
@@ -5456,7 +5499,99 @@ async function verifyMaterialTransaction(id) {
     await loadMaterialDashboard();
 }
 
-// Expose material functions to global scope
+async function exportMaterialToExcel() {
+    // Pastikan data terbaru sudah dimuat sebelum export
+    if (materialTransactions.length === 0 && materialInventory.length === 0) {
+        await loadMaterialDashboard();
+    }
+
+    const filteredTx = currentMaterialFilter === 'ALL'
+        ? materialTransactions
+        : materialTransactions.filter(t => t.transaction_type === currentMaterialFilter);
+
+    if (filteredTx.length === 0 && materialInventory.length === 0) {
+        alert('Belum ada data transaksi maupun stok material untuk di-export.');
+        return;
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const typeLabels = {
+        'OUT': 'Ambil Material (Out)',
+        'RETURN_UNUSED': 'Return Sisa',
+        'REFURBISH': 'Refurbish'
+    };
+
+    const txRows = filteredTx.map((t, idx) => ({
+        'No': idx + 1,
+        'Tanggal': t.date || '-',
+        'Teknisi': t.uploader || '-',
+        'Jenis Transaksi': typeLabels[t.transaction_type] || t.transaction_type || '-',
+        'Nama Material': t.material_name || '-',
+        'Jumlah': t.quantity || 0,
+        'Satuan': t.unit || 'pcs',
+        'Serial Number': t.serial_number || '-',
+        'Kondisi': t.item_condition || '-',
+        'Keperluan / Target': t.project_target || '-',
+        'Status': t.status || 'Pending',
+        'Diverifikasi Oleh': t.verified_by || '-',
+        'Link Foto Evident': t.file_url || '-'
+    }));
+
+    const invRows = materialInventory.map((item, idx) => {
+        const isLow = (item.stock_new || 0) <= (item.min_stock_alert || 5);
+        return {
+            'No': idx + 1,
+            'Nama Material': item.name || '-',
+            'Kategori': item.category || '-',
+            'Satuan': item.unit || 'pcs',
+            'Stok Baru': item.stock_new || 0,
+            'Stok Refurbish': item.stock_refurbish || 0,
+            'Stok Rusak': item.stock_damaged || 0,
+            'Batas Minimum': item.min_stock_alert || 5,
+            'Status Stok': isLow ? 'MENIPIS' : 'AMAN'
+        };
+    });
+
+    if (typeof XLSX !== 'undefined') {
+        const wb = XLSX.utils.book_new();
+        const wsTx = XLSX.utils.json_to_sheet(txRows.length > 0 ? txRows : [{ 'Info': 'Belum ada transaksi' }]);
+        wsTx['!cols'] = [
+            { wch: 5 }, { wch: 20 }, { wch: 18 }, { wch: 22 }, { wch: 32 },
+            { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 18 }, { wch: 28 },
+            { wch: 20 }, { wch: 22 }, { wch: 45 }
+        ];
+        XLSX.utils.book_append_sheet(wb, wsTx, 'Transaksi Material');
+
+        const wsInv = XLSX.utils.json_to_sheet(invRows.length > 0 ? invRows : [{ 'Info': 'Belum ada stok' }]);
+        wsInv['!cols'] = [
+            { wch: 5 }, { wch: 36 }, { wch: 16 }, { wch: 10 },
+            { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 }
+        ];
+        XLSX.utils.book_append_sheet(wb, wsInv, 'Stok Gudang');
+
+        XLSX.writeFile(wb, `Laporan_Material_Mahawira_${todayStr}.xlsx`);
+    } else {
+        // Fallback CSV jika library SheetJS gagal dimuat
+        const headers = Object.keys(txRows[0] || {});
+        const csvLines = [
+            headers.join(','),
+            ...txRows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','))
+        ];
+        const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Laporan_Material_Mahawira_${todayStr}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+}
+
+// Expose material & navigation functions to global scope
+window.openNavDrawer = openNavDrawer;
+window.closeNavDrawer = closeNavDrawer;
+window.toggleNavDrawer = toggleNavDrawer;
+window.exportMaterialToExcel = exportMaterialToExcel;
 window.loadMaterialDashboard = loadMaterialDashboard;
 window.filterMaterialTx = filterMaterialTx;
 window.previewMaterialPhoto = previewMaterialPhoto;
