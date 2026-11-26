@@ -5,8 +5,24 @@ body {
 }
 
 .glass-header {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+/* Professional Dashboard Polish */
+main section > div.bg-white,
+main section.bg-white {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+main section > div.bg-white:hover {
+    box-shadow: 0 10px 25px -10px rgba(15, 23, 42, 0.08);
+    border-color: rgba(148, 163, 184, 0.45);
+}
+
+table thead th {
+    letter-spacing: 0.04em;
 }
 
 .custom-scrollbar::-webkit-scrollbar {

@@ -200,66 +200,66 @@
     </aside>
 
     <!-- Main Dashboard UI -->
-    <header class="sticky top-0 z-30 glass-header border-b border-slate-200">
+    <header class="sticky top-0 z-30 glass-header border-b border-slate-200/90 shadow-2xs">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <!-- Hamburger Menu + Logo & Brand -->
-                <div class="flex items-center gap-3">
+            <div class="flex items-center justify-between h-16 gap-3">
+                <!-- Single Hamburger Menu + Logo & Brand -->
+                <div class="flex items-center gap-3 min-w-0">
                     <button id="navDrawerToggle" type="button" onclick="toggleNavDrawer()"
-                        class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 border border-slate-200/80 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                        class="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white flex items-center justify-center transition shadow-sm cursor-pointer shrink-0"
                         title="Buka Menu Navigasi" aria-label="Buka Menu Navigasi">
                         <i class="fa-solid fa-bars text-base"></i>
                     </button>
 
                     <div
-                        class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 hidden sm:flex">
-                        <i class="fa-solid fa-folder-closed text-lg"></i>
+                        class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/25 hidden sm:flex shrink-0">
+                        <i class="fa-solid fa-tower-broadcast text-base"></i>
                     </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight" id="dashboardTitle">EvidentVault
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-tight truncate" id="dashboardTitle">EvidentVault
                             </h1>
                             <button onclick="openModal('titleModal')"
-                                class="role-editor text-slate-400 hover:text-blue-600 transition text-xs p-1"
+                                class="role-editor text-slate-400 hover:text-blue-600 transition text-xs p-1 shrink-0"
                                 title="Ubah Nama Dashboard">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
                         </div>
-                        <p class="text-[11px] sm:text-xs text-slate-500 font-medium" id="dashboardSubtitle">Dashboard Pengumpulan Data
+                        <p class="text-[11px] sm:text-xs text-slate-500 font-medium truncate" id="dashboardSubtitle">Dashboard Pengumpulan Data
                             Evident</p>
                     </div>
                 </div>
 
                 <!-- Global Actions & Profile -->
-                <div class="flex items-center gap-3">
-                    <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                        <div class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold"
+                <div class="flex items-center gap-2 sm:gap-2.5 shrink-0">
+                    <div class="flex items-center gap-2 bg-slate-100/90 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200/80">
+                        <div class="w-6 h-6 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs"
                             id="userAvatar">M</div>
                         <div class="text-left hidden sm:block">
                             <p class="text-[11px] font-bold text-slate-800 leading-none" id="currentEmailDisplay">-</p>
                             <span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded"
                                 id="userRoleBadge">-</span>
                         </div>
-                        <button onclick="handleSignOut()" class="ml-1 text-slate-400 hover:text-rose-600 text-xs p-1"
+                        <button onclick="handleSignOut()" class="ml-1 text-slate-400 hover:text-rose-600 text-xs p-1 transition"
                             title="Keluar Akun">
                             <i class="fa-solid fa-right-from-bracket"></i>
                         </button>
                     </div>
 
                     <button id="shareBtn" onclick="openModal('shareModal')"
-                        class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition shadow-sm shadow-emerald-600/20">
+                        class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition shadow-sm shadow-emerald-600/20">
                         <i class="fa-solid fa-user-plus text-xs"></i>
-                        <span class="hidden sm:inline">Bagikan Akses</span>
+                        <span class="hidden md:inline">Bagikan Akses</span>
                     </button>
 
                     <button onclick="openModal('categoryModal')"
-                        class="role-editor bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition border border-slate-200">
+                        class="role-editor bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition border border-slate-200 shadow-2xs">
                         <i class="fa-solid fa-tags text-xs text-slate-500"></i>
                         <span class="hidden lg:inline">Kelola Kategori</span>
                     </button>
 
                     <button onclick="openModal('uploadModal')"
-                        class="role-editor bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition shadow-sm shadow-blue-600/30">
+                        class="role-editor bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 text-white px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition shadow-sm shadow-blue-600/30">
                         <i class="fa-solid fa-plus text-xs"></i>
                         <span>Unggah Evident</span>
                     </button>
@@ -268,19 +268,14 @@
         </div>
     </header>
 
-    <!-- Sub-Navbar: Indikator Modul Aktif & Aksi Cepat -->
-    <nav class="sticky top-16 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
+    <!-- Sub-Navbar: Indikator Modul Aktif (Tanpa Tombol Menu Ganda) -->
+    <nav class="sticky top-16 z-20 bg-slate-50/90 backdrop-blur-md border-b border-slate-200/80">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-12 py-1.5">
-                <div class="flex items-center gap-2.5">
-                    <button type="button" onclick="toggleNavDrawer()"
-                        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer">
-                        <i class="fa-solid fa-bars text-slate-600"></i>
-                        <span>Menu</span>
-                    </button>
-                    <div class="h-4 w-px bg-slate-200"></div>
+            <div class="flex items-center justify-between h-11 py-1.5">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden sm:inline">Modul Aktif:</span>
                     <div id="activeModuleBadge"
-                        class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold">
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold shadow-2xs">
                         <i class="fa-solid fa-folder-closed text-blue-600"></i>
                         <span>Berkas Evident (ODC, ODP, Tiang)</span>
                     </div>
@@ -288,7 +283,7 @@
 
                 <div class="flex items-center gap-2">
                     <button type="button" onclick="exportKmlFile()"
-                        class="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+                        class="bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
                         title="Download seluruh titik GPS ke file KML Google Earth">
                         <i class="fa-solid fa-cloud-arrow-down text-emerald-600 text-xs"></i>
                         <span class="hidden md:inline">Download KML Google Earth</span>
