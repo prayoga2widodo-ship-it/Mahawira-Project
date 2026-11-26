@@ -3629,6 +3629,130 @@ function previewFile(id) {
     openModal('previewModal');
 }
 
+// =====================================================================
+// MODUL GANTI / UPLOAD ULANG FOTO EVIDENT (EDIT FOTO TERUPLOAD)
+// =====================================================================
+let replacePhotoTargetId = null;
+
+function openReplacePhotoModal() {
+    if (!currentPreviewId) return;
+    const item = sampleData.find(d => d.id === currentPreviewId);
+    if (!item) return;
+
+    replacePhotoTargetId = item.id;
+    document.getElementById('replaceTargetLabel').innerText = item.deviceLabel || item.name;
+    document.getElementById('replaceTargetType').innerText = item.photoType || (item.category ? `Kategori: ${item.category}` : '-');
+    document.getElementById('replaceTargetUploader').innerText = item.uploader || '-';
+
+    // Reset input dan preview
+    const fileInput = document.getElementById('replaceFileInput');
+    if (fileInput) fileInput.value = '';
+    const previewBox = document.getElementById('replaceImagePreviewBox');
+    if (previewBox) previewBox.classList.add('hidden');
+
+    openModal('replacePhotoModal');
+}
+
+function handleReplaceFilePreview(input) {
+    const file = input.files && input.files[0];
+    const previewBox = document.getElementById('replaceImagePreviewBox');
+    const previewImg = document.getElementById('replaceImagePreviewEl');
+    const previewInfo = document.getElementById('replaceImagePreviewInfo');
+    if (!file) {
+        if (previewBox) previewBox.classList.add('hidden');
+        return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    if (previewImg) previewImg.src = objectUrl;
+    if (previewInfo) previewInfo.innerText = `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+    if (previewBox) previewBox.classList.remove('hidden');
+}
+
+async function handleReplacePhotoSubmit(e) {
+    e.preventDefault();
+    if (!replacePhotoTargetId) return alert('Target evident tidak valid.');
+
+    const item = sampleData.find(d => d.id === replacePhotoTargetId);
+    if (!item) return alert('Data evident tidak ditemukan.');
+
+    const fileInput = document.getElementById('replaceFileInput');
+    const file = fileInput && fileInput.files && fileInput.files[0];
+    if (!file) return alert('Silakan pilih file foto terlebih dahulu.');
+
+    const submitBtn = document.getElementById('submitReplacePhotoBtn');
+    const submitText = document.getElementById('submitReplacePhotoText');
+    const originalText = submitText ? submitText.innerText : 'Simpan & Perbarui Foto';
+
+    try {
+        if (submitBtn) submitBtn.disabled = true;
+        if (submitText) submitText.innerText = 'Mengunggah ke Cloud Storage...';
+
+        // 1. Bersihkan nama file agar S3-safe
+        const safeOriginalName = (file.name || 'evident.jpg').replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const storagePath = `uploads/${Date.now()}_id_${item.id}_${safeOriginalName}`;
+
+        // 2. Upload langsung ke Supabase Storage bucket 'evidents'
+        const { data: uploadData, error: uploadError } = await supabaseClient.storage
+            .from('evidents')
+            .upload(storagePath, file, {
+                contentType: file.type || 'image/jpeg',
+                upsert: true
+            });
+
+        if (uploadError) {
+            throw new Error(`Gagal upload ke Cloud Storage: ${uploadError.message}`);
+        }
+
+        // 3. Dapatkan public URL
+        const { data: publicData } = supabaseClient.storage
+            .from('evidents')
+            .getPublicUrl(storagePath);
+
+        const newFileUrl = publicData ? publicData.publicUrl : null;
+        if (!newFileUrl) {
+            throw new Error('Gagal mendapatkan tautan publik foto dari storage.');
+        }
+
+        const newSizeStr = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+        const updatedName = `evident_${(item.deviceLabel || item.name).replace(/[^a-zA-Z0-9_.-]/g, '_')}_${Date.now()}.jpg`;
+
+        // 4. Update data di tabel database Supabase
+        const { error: dbError } = await supabaseClient
+            .from('evidents')
+            .update({
+                file_url: newFileUrl,
+                name: updatedName,
+                size: newSizeStr
+            })
+            .eq('id', item.id);
+
+        if (dbError) {
+            throw new Error(`Gagal memperbarui database: ${dbError.message}`);
+        }
+
+        // 5. Update data lokal sampleData
+        item.fileUrl = newFileUrl;
+        item.name = updatedName;
+        item.size = newSizeStr;
+        delete item.fileObj;
+
+        // 6. Refresh modal preview dan tampilan dashboard
+        closeModal('replacePhotoModal');
+        previewFile(item.id);
+        renderCategoryUI();
+        filterFiles();
+
+        alert(`✅ Berhasil! Foto evident "${item.deviceLabel || item.name}" telah berhasil diperbarui dan tersimpan permanen di Cloud Storage.`);
+    } catch (err) {
+        console.error("Gagal mengganti foto:", err);
+        alert(`❌ Terjadi kesalahan: ${err.message}`);
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+        if (submitText) submitText.innerText = originalText;
+    }
+}
+
 async function handleUpload(e) {
     e.preventDefault();
     if (currentUserRole !== 'owner' && currentUserRole !== 'editor') return alert('Akses ditolak: Viewer tidak dapat mengunggah file.');

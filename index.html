@@ -791,6 +791,12 @@
             <div class="flex items-center justify-between border-t border-slate-100 pt-3">
                 <div class="text-xs text-slate-500"><span id="previewInfo">-</span></div>
                 <div class="flex items-center gap-2">
+                    <button id="replacePhotoBtn" onclick="openReplacePhotoModal()"
+                        class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
+                        title="Upload Ulang / Ganti Foto Evident">
+                        <i class="fa-solid fa-camera-rotate text-xs"></i>
+                        <span>Ganti / Upload Ulang Foto</span>
+                    </button>
                     <button id="deleteFromPreviewBtn" onclick="deleteCurrentPreviewEvident()"
                         class="hidden px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
                         title="Hapus Evident Permanen (Owner)">
@@ -804,6 +810,77 @@
                             class="fa-solid fa-download"></i> Unduh File</a>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Ganti / Upload Ulang Foto Evident -->
+    <div id="replacePhotoModal"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shadow-md shadow-amber-500/20">
+                        <i class="fa-solid fa-camera-rotate"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Ganti / Upload Ulang Foto Evident</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5" id="replaceModalSubtitle">Unggah foto fisik asli untuk menggantikan file ini</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('replacePhotoModal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Detail Evident Saat Ini -->
+            <div class="bg-slate-50 rounded-xl p-3 border border-slate-200/80 space-y-1.5 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-500">Perangkat / Label:</span>
+                    <span class="font-bold text-slate-900" id="replaceTargetLabel">-</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-500">Tipe Foto:</span>
+                    <span class="font-semibold text-amber-700" id="replaceTargetType">-</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-500">Uploader Asli:</span>
+                    <span class="text-slate-700" id="replaceTargetUploader">-</span>
+                </div>
+            </div>
+
+            <!-- Form Pilih File Foto -->
+            <form id="replacePhotoForm" onsubmit="handleReplacePhotoSubmit(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Pilih Foto Baru Dari Komputer / HP</label>
+                    <input type="file" id="replaceFileInput" accept="image/jpeg,image/png,image/jpg" required
+                        class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-slate-200 rounded-xl p-1.5 bg-white cursor-pointer"
+                        onchange="handleReplaceFilePreview(this)">
+                </div>
+
+                <!-- Preview Foto Baru -->
+                <div id="replaceImagePreviewBox" class="hidden rounded-xl border border-slate-200 bg-slate-900/5 p-2 text-center">
+                    <img id="replaceImagePreviewEl" src="" alt="Pratinjau Foto Baru" class="max-h-48 mx-auto rounded-lg object-contain shadow-xs">
+                    <p class="text-[10.5px] text-slate-500 mt-1.5" id="replaceImagePreviewInfo">-</p>
+                </div>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-[11px] text-amber-900 flex items-start gap-2">
+                    <i class="fa-solid fa-circle-info text-amber-600 mt-0.5"></i>
+                    <span>Foto akan langsung diunggah secara permanen ke <b>Supabase Cloud Storage</b> tanpa mengubah histori tanggal dan koordinat GPS asli di lapangan.</span>
+                </div>
+
+                <!-- Tombol Aksi -->
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('replacePhotoModal')"
+                        class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold transition cursor-pointer">
+                        Batal
+                    </button>
+                    <button type="submit" id="submitReplacePhotoBtn"
+                        class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-amber-500/30 cursor-pointer">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span id="submitReplacePhotoText">Simpan & Perbarui Foto</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -969,7 +1046,7 @@
 
     <!-- Application JavaScript Scripts (Cache-Busted to Ensure Instant Update) -->
     <script src="config.js?v=20261125_02"></script>
-    <script src="script.js?v=20261125_04"></script>
+    <script src="script.js?v=20261126_01"></script>
 </body>
 
 </html>
